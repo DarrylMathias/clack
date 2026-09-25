@@ -1,0 +1,59 @@
+[workspace]
+members = [
+    "crates/clack-core",
+    "crates/clack-input",
+    "crates/clack",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["DarrylMathias"]
+license = "MIT"
+repository = "https://github.com/DarrylMathias/clack"
+
+[workspace.dependencies]
+# Error handling
+anyhow = "1"
+thiserror = "2"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-appender = "0.2"
+
+# Async / channels
+crossbeam-channel = "0.5"
+rtrb = "0.3"
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+
+# Audio
+cpal = "0.15"
+symphonia = { version = "0.5", features = ["ogg", "vorbis", "mp3", "wav", "flac", "aac"] }
+
+# Cross-platform paths
+dirs = "5"
+
+# Network / packs
+ureq = { version = "2", features = ["tls"] }
+sha2 = "0.10"
+flate2 = "1"
+tar = "0.4"
+zip = "2"
+
+# TUI
+crossterm = "0.27"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
