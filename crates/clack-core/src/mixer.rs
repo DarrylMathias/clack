@@ -7,7 +7,10 @@
 //!     ring and is dropped on the engine thread.
 //!   - Samples are decoded once at load time and stored as f32 at the device rate.
 
-use std::sync::Arc;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 
 use anyhow::{Context, Result};
 use cpal::{
@@ -92,6 +95,10 @@ impl Default for Voice {
 pub struct Engine {
     _stream: cpal::Stream,
     pub cmd_tx: Producer<PlayCmd>,
+    pub sample_rate: u32,
+    pub channels: u16,
+    /// Set by the error callback when the stream dies (device removed / switched).
+    pub stream_error: Arc<AtomicBool>,
 }
 
 impl Engine {
@@ -140,15 +147,31 @@ impl Engine {
         // SPSC ring: engine thread → audio callback.
         let (cmd_tx, cmd_rx) = RingBuffer::<PlayCmd>::new(256);
 
+        let stream_error = Arc::new(AtomicBool::new(false));
+        let stream_error_cb = stream_error.clone();
+
         let stream = match supported.sample_format() {
-            SampleFormat::F32 => build_stream::<f32>(&device, &config, cmd_rx)?,
-            SampleFormat::I16 => build_stream::<i16>(&device, &config, cmd_rx)?,
-            SampleFormat::U16 => build_stream::<u16>(&device, &config, cmd_rx)?,
+            SampleFormat::F32 => build_stream::<f32>(&device, &config, cmd_rx, stream_error_cb)?,
+            SampleFormat::I16 => build_stream::<i16>(&device, &config, cmd_rx, stream_error_cb)?,
+            SampleFormat::U16 => build_stream::<u16>(&device, &config, cmd_rx, stream_error_cb)?,
             fmt => anyhow::bail!("unsupported sample format: {fmt:?}"),
         };
 
         stream.play().context("starting audio stream")?;
-        Ok(Engine { _stream: stream, cmd_tx })
+        let sr = supported.sample_rate().0;
+        let ch = supported.channels();
+        Ok(Engine { _stream: stream, cmd_tx, sample_rate: sr, channels: ch, stream_error })
+    }
+
+    /// Rebuild the engine when the audio device changes (headphones in/out, default changed).
+    /// Preserves the current master gain by re-sending it after restart.
+    pub fn restart(&mut self, current_gain: f32) -> Result<()> {
+        info!("audio stream error detected — rebuilding stream");
+        // Build a fresh engine, move its fields into self.
+        let mut fresh = Engine::start()?;
+        fresh.set_master_gain(current_gain);
+        *self = fresh;
+        Ok(())
     }
 
     /// Convenience: send a play command (best-effort, silently drops if ring full).
@@ -165,6 +188,7 @@ fn build_stream<S>(
     device: &cpal::Device,
     config: &StreamConfig,
     mut cmd_rx: Consumer<PlayCmd>,
+    stream_error: Arc<AtomicBool>,
 ) -> Result<cpal::Stream>
 where
     S: cpal::Sample + cpal::SizedSample + cpal::FromSample<f32>,
@@ -244,7 +268,10 @@ where
                     }
                 }
             },
-            |err| error!("audio stream error: {err}"),
+            move |err| {
+                error!("audio stream error: {err}");
+                stream_error.store(true, Ordering::Relaxed);
+            },
             None,
         )
         .context("building output stream")?;
