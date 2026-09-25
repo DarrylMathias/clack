@@ -64,6 +64,15 @@ fn run_loop(tx: Sender<KeyEvent>, stop: Arc<AtomicBool>) -> Result<()> {
 
     // Set up inotify to watch /dev/input for hotplug events.
     let mut inotify = Inotify::init().context("initialising inotify")?;
+    
+    // Set inotify to non-blocking
+    use std::os::fd::AsRawFd;
+    unsafe {
+        let fd = inotify.as_raw_fd();
+        let flags = libc::fcntl(fd, libc::F_GETFL, 0);
+        libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
+    }
+
     inotify
         .watches()
         .add(
@@ -271,9 +280,15 @@ fn is_keyboard(path: &Path) -> bool {
         && supported.contains(Key::KEY_SPACE)
 }
 
-/// Open a device read-only. Returns an error if permission is denied.
 fn open_device(path: &Path) -> Result<Device> {
-    Device::open(path).with_context(|| format!("opening {}", path.display()))
+    let dev = Device::open(path).with_context(|| format!("opening {}", path.display()))?;
+    use std::os::fd::AsRawFd;
+    unsafe {
+        let fd = dev.as_raw_fd();
+        let flags = libc::fcntl(fd, libc::F_GETFL, 0);
+        libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
+    }
+    Ok(dev)
 }
 
 /// Probe keyboard devices and return useful info (used by `clack doctor` / `clack status`).
