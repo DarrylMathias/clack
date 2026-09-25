@@ -1,0 +1,34 @@
+[package]
+name = "clack"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Mechanical keyboard sounds for every keypress, system-wide"
+default-run = "clack"
+
+[[bin]]
+name = "clack"
+path = "src/main.rs"
+
+[dependencies]
+clack-core = { path = "../clack-core" }
+clack-input = { path = "../clack-input" }
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tracing-appender.workspace = true
+crossbeam-channel.workspace = true
+clap.workspace = true
+ureq.workspace = true
+sha2.workspace = true
+flate2.workspace = true
+tar.workspace = true
+zip.workspace = true
+crossterm.workspace = true
+dirs.workspace = true
