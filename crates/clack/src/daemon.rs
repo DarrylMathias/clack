@@ -1,16 +1,16 @@
 //! Daemon — the background service process (§5.6).
 //!
-//! Run via `clack daemon` (hidden subcommand). Wires:
-//!   input thread(s) → engine thread → audio callback
+//! Architecture (§4):
+//!   input thread → crossbeam channel → engine thread → rtrb ring → audio callback
 //!
-//! IPC listens on a Unix socket and dispatches ControlMsg to the engine.
-//! Logging goes to ~/.local/state/clack/clack.log (never logs key codes).
+//! The Engine (cpal stream) lives on the engine thread — cpal streams are not Send.
+//! IPC commands are passed to the engine thread via a secondary crossbeam channel.
 
 use std::{
     os::unix::net::UnixListener,
     sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
+        atomic::{AtomicBool, AtomicU32, Ordering},
+        Arc, Mutex,
     },
     thread,
     time::Duration,
@@ -23,76 +23,64 @@ use clack_core::{
     config::{log_path, socket_path, Config, State},
     decoder::load_pack,
     ipc::{Command, DaemonStatus, Response},
-    mixer::{perceptual_gain, Engine},
+    mixer::{perceptual_gain, Engine, SampleBank},
     pack::pack_dir,
     toggle::ToggleDetector,
     types::{KeyEvent, KeyState},
 };
 use clack_input::{DefaultBackend, InputBackend};
+use crossbeam_channel::{unbounded, Sender};
 
-use crossbeam_channel::unbounded;
+// ── Internal engine-thread control messages ───────────────────────────────────
+
+enum EngineMsg {
+    SetBank(SampleBank),
+    SetGain(f32),
+    Reload,
+    Shutdown,
+}
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 pub fn run() -> Result<()> {
-    // Set up logging to file.
-    let log = log_path();
-    if let Some(dir) = log.parent() {
+    // Ensure log dir exists.
+    let log_dir = log_path();
+    if let Some(dir) = log_dir.parent() {
         std::fs::create_dir_all(dir)?;
     }
 
-    // Load config and state.
     let config = Config::load().context("loading config")?;
     let state = State::load().unwrap_or_default();
 
     info!("clack daemon starting — pack: {}", config.default_pack);
 
-    // Single-instance guard: try to bind the socket; if it already exists and
-    // another daemon is listening, exit cleanly.
+    // Single-instance guard via socket bind.
     let sock_path = socket_path();
     if let Some(dir) = sock_path.parent() {
         std::fs::create_dir_all(dir)?;
     }
-    // Remove stale socket from a previous crash.
     let _ = std::fs::remove_file(&sock_path);
-
     let listener = UnixListener::bind(&sock_path)
         .with_context(|| format!("binding IPC socket at {}", sock_path.display()))?;
     listener.set_nonblocking(true)?;
 
-    // Load the active pack.
-    let pdir = pack_dir(&config.default_pack);
-    if !pdir.exists() {
-        warn!("pack '{}' not found — running without sound", config.default_pack);
-    }
+    // Shared state (IPC thread ↔ engine thread and IPC thread ↔ status endpoint).
+    let muted = Arc::new(AtomicBool::new(state.muted));
+    let master_gain_bits = Arc::new(AtomicU32::new(
+        perceptual_gain(config.volume).to_bits(),
+    ));
+    let active_pack_name = Arc::new(Mutex::new(config.default_pack.clone()));
 
-    // Start the audio engine.
-    let mut engine = Engine::start().context("starting audio engine")?;
-    engine.set_master_gain(perceptual_gain(config.volume));
-
-    // Now load the pack at the correct sample rate.
-    // (The engine exposes the device sample rate; for now we assume 48000.)
-    // TODO: expose device sample_rate from Engine in P2.1 follow-up.
-    let device_rate: u32 = 48_000;
-    if pdir.exists() {
-        match load_pack(&pdir, device_rate) {
-            Ok(bank) => {
-                info!("pack '{}' loaded", config.default_pack);
-                // Store bank in engine context — for now keep reference in engine thread.
-                // Full engine ↔ bank wiring is done when daemon thread is connected.
-                let _ = bank; // TODO: wire bank into engine playback in P2.1 follow-up
-            }
-            Err(e) => warn!("failed to load pack '{}': {e:#}", config.default_pack),
-        }
-    }
-
-    // Start the input backend.
-    let stop_input = Arc::new(AtomicBool::new(false));
+    // Channel: main/IPC → engine thread.
+    let (eng_tx, eng_rx) = unbounded::<EngineMsg>();
+    // Channel: input backend → engine thread.
     let (key_tx, key_rx) = unbounded::<KeyEvent>();
 
+    // ── Input thread ──────────────────────────────────────────────────────────
+    let stop_input = Arc::new(AtomicBool::new(false));
     {
         let stop = stop_input.clone();
-        let tx = key_tx.clone();
+        let tx = key_tx;
         thread::Builder::new()
             .name("clack-input".into())
             .spawn(move || {
@@ -103,69 +91,171 @@ pub fn run() -> Result<()> {
             })?;
     }
 
-    // Engine thread: receives key events, runs toggle detector, dispatches play commands.
-    let stop_engine = Arc::new(AtomicBool::new(false));
-    let muted = Arc::new(AtomicBool::new(state.muted));
+    // ── Engine thread ─────────────────────────────────────────────────────────
+    // Owns the cpal Engine (not Send); runs the toggle detector; dispatches PlayCmd.
+    let device_rate_shared = Arc::new(AtomicU32::new(0));
+    let device_rate_for_eng = device_rate_shared.clone();
 
-    {
-        let stop = stop_engine.clone();
-        let muted = muted.clone();
-        let toggle_binding = config.toggle.clone();
-        thread::Builder::new()
-            .name("clack-engine".into())
-            .spawn(move || {
-                let mut detector = ToggleDetector::default();
-                loop {
-                    if stop.load(Ordering::Relaxed) { break; }
-                    match key_rx.recv_timeout(Duration::from_millis(100)) {
-                        Ok(event) => {
-                            // Check for toggle gesture.
-                            if detector.feed(&event, &toggle_binding) {
-                                let was_muted = muted.fetch_xor(true, Ordering::SeqCst);
-                                info!("toggle: {}", if was_muted { "unmuted" } else { "muted" });
-                                // TODO: play feedback tone (P2.1 follow-up)
-                                let s = State { muted: !was_muted };
-                                let _ = s.save();
-                            }
+    let toggle_binding = config.toggle.clone();
+    let release_sounds = config.release_sounds;
+    let humanize = config.humanize;
+    let muted_eng = muted.clone();
 
-                            // Play sound if not muted.
-                            if !muted.load(Ordering::Relaxed) && event.state == KeyState::Down {
-                                // TODO: look up clip from bank and send to engine (P2.1 follow-up)
+    let default_pack_name = config.default_pack.clone();
+    let eng_tx_clone = eng_tx.clone(); // so IPC thread can send
+
+    thread::Builder::new()
+        .name("clack-engine".into())
+        .spawn(move || {
+            // Start audio engine on this thread.
+            let mut engine = match Engine::start() {
+                Ok(e) => e,
+                Err(e) => { error!("audio engine failed: {e:#}"); return; }
+            };
+
+            let device_rate = engine.sample_rate;
+            device_rate_for_eng.store(device_rate, Ordering::Relaxed);
+
+            // Set initial gain.
+            let init_gain = perceptual_gain(config.volume);
+            engine.set_master_gain(init_gain);
+            let mut current_gain = init_gain;
+
+            info!("audio engine: {} Hz, {} ch", device_rate, engine.channels);
+
+            // Load initial pack.
+            let pdir = pack_dir(&default_pack_name);
+            let mut bank = if pdir.exists() {
+                match load_pack(&pdir, device_rate) {
+                    Ok(b) => { info!("pack '{default_pack_name}' loaded"); b }
+                    Err(e) => { warn!("pack load failed: {e:#}"); SampleBank::empty() }
+                }
+            } else {
+                warn!("pack '{default_pack_name}' not found");
+                SampleBank::empty()
+            };
+
+            let mut detector = ToggleDetector::default();
+
+            loop {
+                // Check for engine-thread messages (non-blocking).
+                while let Ok(msg) = eng_rx.try_recv() {
+                    match msg {
+                        EngineMsg::SetBank(b) => bank = b,
+                        EngineMsg::SetGain(g) => {
+                            engine.set_master_gain(g);
+                            current_gain = g;
+                        }
+                        EngineMsg::Reload => {
+                            // Reload config and pack inside the engine thread.
+                            if let Ok(cfg) = Config::load() {
+                                let pdir = pack_dir(&cfg.default_pack);
+                                if let Ok(new_bank) = load_pack(&pdir, device_rate_for_eng.load(Ordering::Relaxed)) {
+                                    bank = new_bank;
+                                    info!("reloaded pack '{}'", cfg.default_pack);
+                                }
+                                let g = perceptual_gain(cfg.volume);
+                                engine.set_master_gain(g);
+                                current_gain = g;
                             }
                         }
-                        Err(crossbeam_channel::RecvTimeoutError::Timeout) => {}
-                        Err(crossbeam_channel::RecvTimeoutError::Disconnected) => break,
+                        EngineMsg::Shutdown => return,
                     }
                 }
-            })?;
-    }
 
-    // IPC loop: accept connections, dispatch commands.
+                // Stream recovery.
+                if engine.stream_error.load(Ordering::Relaxed) {
+                    if let Err(e) = engine.restart(current_gain) {
+                        error!("stream restart failed: {e:#}");
+                    }
+                }
+
+                // Key events (with short timeout so we can process EngineMsg).
+                let event = match key_rx.recv_timeout(Duration::from_millis(20)) {
+                    Ok(ev) => ev,
+                    Err(crossbeam_channel::RecvTimeoutError::Timeout) => continue,
+                    Err(crossbeam_channel::RecvTimeoutError::Disconnected) => break,
+                };
+
+                // Toggle gesture.
+                if detector.feed(&event, &toggle_binding) {
+                    let was = muted_eng.fetch_xor(true, Ordering::SeqCst);
+                    let now_muted = !was;
+                    info!("toggle: {}", if now_muted { "muted" } else { "unmuted" });
+                    play_tone(&mut engine, !now_muted);
+                    let _ = State { muted: now_muted }.save();
+                    continue;
+                }
+
+                if muted_eng.load(Ordering::Relaxed) {
+                    continue;
+                }
+
+                let is_release = event.state == KeyState::Up;
+                if is_release && !release_sounds {
+                    continue;
+                }
+
+                if let Some(clip) = bank.pick_clip(event.code, is_release) {
+                    let samples = clip.samples.clone();
+                    let channels = clip.channels;
+                    let (rate, gain) = if humanize {
+                        let t = nano_rand();
+                        let pitch = 0.97 + (t & 0xFF) as f32 * (0.06 / 255.0);
+                        let g = 0.90 + ((t >> 8) & 0xFF) as f32 * (0.20 / 255.0);
+                        (pitch, g)
+                    } else {
+                        (1.0f32, 1.0f32)
+                    };
+                    engine.play(samples, channels, rate, gain);
+                }
+            }
+        })?;
+
+    // Wait briefly for engine to report its sample rate.
+    let device_rate = {
+        let deadline = std::time::Instant::now() + Duration::from_secs(3);
+        loop {
+            let r = device_rate_shared.load(Ordering::Relaxed);
+            if r > 0 { break r; }
+            if std::time::Instant::now() > deadline {
+                warn!("engine rate not reported; using 48000");
+                break 48_000;
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+    };
+
+    // ── IPC loop ──────────────────────────────────────────────────────────────
     info!("IPC socket: {}", sock_path.display());
+
     loop {
-        // Handle SIGTERM via a flag (set by signal handler below).
         if SHUTDOWN.load(Ordering::Relaxed) {
             info!("shutdown requested");
             break;
+        }
+        if RELOAD.load(Ordering::Relaxed) {
+            RELOAD.store(false, Ordering::Relaxed);
+            let _ = eng_tx.send(EngineMsg::Reload);
         }
 
         match listener.accept() {
             Ok((mut stream, _)) => {
                 use std::io::{BufRead, BufReader, Write};
-                let reader = BufReader::new(stream.try_clone()?);
-                for line in reader.lines() {
-                    let line = match line { Ok(l) => l, Err(_) => break };
-                    let cmd: Command = match serde_json::from_str(&line) {
-                        Ok(c) => c,
-                        Err(e) => {
-                            let resp = Response::err(format!("bad command: {e}"));
-                            let _ = stream.write_all(
-                                (serde_json::to_string(&resp).unwrap() + "\n").as_bytes(),
-                            );
-                            continue;
-                        }
+                let mut reader = BufReader::new(stream.try_clone()?);
+                let mut line = String::new();
+                if reader.read_line(&mut line).is_ok() && !line.is_empty() {
+                    let resp = match serde_json::from_str::<Command>(line.trim()) {
+                        Ok(cmd) => handle_ipc(
+                            cmd,
+                            &muted,
+                            &master_gain_bits,
+                            &active_pack_name,
+                            &eng_tx,
+                            device_rate,
+                        ),
+                        Err(e) => Response::err(format!("bad command: {e}")),
                     };
-                    let resp = dispatch_command(cmd, &muted, &config, &engine);
                     let _ = stream.write_all(
                         (serde_json::to_string(&resp).unwrap() + "\n").as_bytes(),
                     );
@@ -178,79 +268,149 @@ pub fn run() -> Result<()> {
         }
     }
 
-    // Graceful shutdown.
+    let _ = eng_tx.send(EngineMsg::Shutdown);
     stop_input.store(true, Ordering::SeqCst);
-    stop_engine.store(true, Ordering::SeqCst);
     let _ = std::fs::remove_file(&sock_path);
     info!("clack daemon stopped");
     Ok(())
 }
 
-fn dispatch_command(cmd: Command, muted: &Arc<AtomicBool>, config: &Config, _engine: &Engine) -> Response {
+// ── IPC command handler ───────────────────────────────────────────────────────
+
+fn handle_ipc(
+    cmd: Command,
+    muted: &Arc<AtomicBool>,
+    gain_bits: &Arc<AtomicU32>,
+    active_pack: &Arc<Mutex<String>>,
+    eng_tx: &Sender<EngineMsg>,
+    device_rate: u32,
+) -> Response {
     match cmd {
         Command::Status => {
+            let g = f32::from_bits(gain_bits.load(Ordering::Relaxed));
+            let vol = (g.sqrt() * 100.0).round() as u8;
             Response::ok(Some(DaemonStatus {
                 running: true,
                 muted: muted.load(Ordering::Relaxed),
-                active_pack: Some(config.default_pack.clone()),
-                volume: config.volume,
-                keyboards_detected: vec![], // TODO: query input backend
+                active_pack: Some(active_pack.lock().unwrap().clone()),
+                volume: vol,
+                keyboards_detected: vec![],
             }))
         }
         Command::Toggle => {
             let was = muted.fetch_xor(true, Ordering::SeqCst);
-            info!("IPC toggle: {}", if was { "unmuted" } else { "muted" });
+            let now_muted = !was;
+            let _ = State { muted: now_muted }.save();
             Response::ok(None)
         }
         Command::SetMuted { muted: m } => {
             muted.store(m, Ordering::SeqCst);
+            let _ = State { muted: m }.save();
             Response::ok(None)
         }
-        Command::Volume { value: _ } => {
-            // TODO: update engine master gain live
+        Command::Volume { value } => {
+            let g = perceptual_gain(value);
+            gain_bits.store(g.to_bits(), Ordering::Relaxed);
+            let _ = eng_tx.send(EngineMsg::SetGain(g));
+            Response::ok(None)
+        }
+        Command::Use { pack } => {
+            let pdir = pack_dir(&pack);
+            if !pdir.exists() {
+                return Response::err(format!(
+                    "pack '{pack}' not installed — run `clack pack add {pack}` first"
+                ));
+            }
+            match load_pack(&pdir, device_rate) {
+                Ok(bank) => {
+                    let _ = eng_tx.send(EngineMsg::SetBank(bank));
+                    *active_pack.lock().unwrap() = pack.clone();
+                    if let Ok(mut cfg) = Config::load() {
+                        cfg.default_pack = pack;
+                        let _ = cfg.save();
+                    }
+                    Response::ok(None)
+                }
+                Err(e) => Response::err(format!("failed to load pack: {e:#}")),
+            }
+        }
+        Command::Reload => {
+            let _ = eng_tx.send(EngineMsg::Reload);
             Response::ok(None)
         }
         Command::Shutdown => {
             SHUTDOWN.store(true, Ordering::SeqCst);
             Response::ok(None)
         }
-        Command::Use { pack: _ } => {
-            // TODO: load pack and send new bank to engine
-            Response::err("live pack switching not yet implemented")
-        }
-        Command::Reload => {
-            // TODO: reload config from disk
-            Response::ok(None)
-        }
     }
 }
 
-// ── Shutdown flag (set by SIGTERM handler) ────────────────────────────────────
+// ── Toggle feedback tone (§3.5) ───────────────────────────────────────────────
+
+fn play_tone(engine: &mut Engine, unmuting: bool) {
+    let rate = engine.sample_rate;
+    let frames = (rate * 80 / 1000) as usize;
+    let (f1, f2) = if unmuting { (440.0f32, 660.0f32) } else { (660.0f32, 440.0f32) };
+
+    let make_beep = |freq: f32| -> std::sync::Arc<Vec<f32>> {
+        std::sync::Arc::new(
+            (0..frames)
+                .map(|i| {
+                    let t = i as f32 / rate as f32;
+                    let env = fade_env(i, frames);
+                    (2.0 * std::f32::consts::PI * freq * t).sin() * 0.35 * env
+                })
+                .collect(),
+        )
+    };
+
+    engine.play(make_beep(f1), 1, 1.0, 1.0);
+    // 30 ms gap between beeps (silent clip).
+    let gap_frames = (rate * 30 / 1000) as usize;
+    engine.play(
+        std::sync::Arc::new(vec![0.0f32; gap_frames]),
+        1, 1.0, 0.0,
+    );
+    engine.play(make_beep(f2), 1, 1.0, 1.0);
+}
+
+fn fade_env(i: usize, total: usize) -> f32 {
+    let fade = (total / 10).max(1);
+    let attack = if i < fade { i as f32 / fade as f32 } else { 1.0 };
+    let rel_start = total.saturating_sub(fade);
+    let release = if i > rel_start { (total - i) as f32 / fade as f32 } else { 1.0 };
+    attack.min(release)
+}
+
+fn nano_rand() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.subsec_nanos() as u64)
+        .unwrap_or(42)
+}
+
+// ── Signals ───────────────────────────────────────────────────────────────────
 
 static SHUTDOWN: AtomicBool = AtomicBool::new(false);
+static RELOAD: AtomicBool = AtomicBool::new(false);
 
-/// Register a SIGTERM handler that sets the SHUTDOWN flag.
 pub fn install_signal_handler() {
+    #[cfg(unix)]
     unsafe {
-        libc_signal(15 /* SIGTERM */, shutdown_handler as *const () as usize);
+        libc_signal(15, sigterm_handler as usize); // SIGTERM
+        libc_signal(1, sighup_handler as usize);   // SIGHUP
     }
 }
 
-extern "C" fn shutdown_handler(_: i32) {
+extern "C" fn sigterm_handler(_: i32) {
     SHUTDOWN.store(true, Ordering::SeqCst);
 }
+extern "C" fn sighup_handler(_: i32) {
+    RELOAD.store(true, Ordering::SeqCst);
+}
 
-#[cfg(target_family = "unix")]
+#[cfg(unix)]
 unsafe fn libc_signal(sig: i32, handler: usize) {
-    libc_sys_signal(sig, handler);
-}
-
-#[cfg(target_family = "unix")]
-extern "C" {
-    fn signal(signum: i32, handler: usize) -> usize;
-}
-
-#[cfg(target_family = "unix")]
-unsafe fn libc_sys_signal(sig: i32, handler: usize) {
+    extern "C" { fn signal(signum: i32, handler: usize) -> usize; }
     signal(sig, handler);
 }

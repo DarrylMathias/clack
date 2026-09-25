@@ -47,6 +47,29 @@ impl SampleBank {
             release_default: Vec::new(),
         }
     }
+
+    /// Pick a random clip for the given keycode and direction.
+    /// Returns None if the bank has no samples at all.
+    pub fn pick_clip(&self, code: crate::types::KeyCode, is_release: bool) -> Option<&Clip> {
+        let bank = if is_release { &self.release } else { &self.press };
+        let default = if is_release { &self.release_default } else { &self.press_default };
+
+        let clips: &[Clip] = bank
+            .get(code as usize)
+            .and_then(|o| o.as_deref())
+            .unwrap_or(default);
+
+        if clips.is_empty() {
+            return None;
+        }
+        // Cheap pseudo-random index — no allocation, no locks.
+        let idx = (std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.subsec_nanos())
+            .unwrap_or(0) as usize)
+            % clips.len();
+        Some(&clips[idx])
+    }
 }
 
 // ── Commands sent from the engine thread to the audio callback ────────────────
