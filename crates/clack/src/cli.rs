@@ -107,6 +107,10 @@ impl Cli {
                 println!("clack is not set up yet. Run `clack setup` to get started.");
                 Ok(())
             }
+            Some(Commands::Daemon) => {
+                crate::daemon::install_signal_handler();
+                crate::daemon::run()
+            }
             Some(cmd) => {
                 println!("TODO: implement command {cmd:?}");
                 Ok(())

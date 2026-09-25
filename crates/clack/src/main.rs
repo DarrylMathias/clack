@@ -6,6 +6,7 @@
 use clap::Parser;
 
 mod cli;
+mod daemon;
 
 use cli::Cli;
 
