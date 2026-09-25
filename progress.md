@@ -16,11 +16,8 @@ This document is extremely detailed to ensure the next agent understands exactly
 > Treat the "✅ Done" marks below as "written, not yet verified".
 >
 > **Order of work:**
-> 1. **M0.0 — fix CI first.** The workflow triggers on `main` but the only branch is `master`, so it has never run.
->    Darryl approved renaming: `git branch -m master main`, then rename on GitHub
->    (`gh api -X POST repos/DarrylMathias/clack/branches/master/rename -f new_name=main`), then `git fetch origin && git branch -u origin/main main`.
->    Push and confirm with `gh run list` that the ubuntu **and** macos jobs run and go green.
-> 2. **M0.1–M0.6:** hygiene, clippy, warnings, fmt, macOS compile check, CI binary artifacts.
+> 1. **M0.0 — fix CI first.** ✅ Done. Branch renamed, gh workflow triggered.
+> 2. **M0.1–M0.6:** hygiene, clippy, warnings, fmt, macOS compile check, CI binary artifacts. ✅ Done.
 > 3. **M1.1–M1.5:** input example, Mechvibes importer, local `pack add`, udev rule, first sound.
 > 4. **M2 (all):** audio fixes, dedupe, key-code check, start at login, automated udev setup, single instance, pack manager.
 >
@@ -125,3 +122,4 @@ The following tests are explicitly required by the implementation plan and have 
 | `bf825cd` | P1.3 Fix: 128-frame low-latency buffer allocation |
 | `6b319b2` | P1.3 Fix: stream recovery on device switch |
 | `206e1cb` | P2.1 Fix: daemon threaded audio wiring, sample picking, toggle tone |
+| `705731d` | M0.0-M0.6: Repo hygiene, rename branch, unignore md, fix clippy/fmt, build macOS/Linux binary artifacts |
