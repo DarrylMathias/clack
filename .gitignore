@@ -1,0 +1,30 @@
+# Rust build artifacts
+/target/
+**/target/
+
+# Cargo lock for library crates (keep for binaries)
+# Cargo.lock is kept; clack is a binary workspace
+
+# Environment / IDE
+.env
+.env.*
+.zed/
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+*.log.*
+
+# Markdown files (implementation notes, progress docs, etc.)
+*.md
+**/*.md
+
+# Temp / scratch
+*.tmp
+*.bak
+*.swp
