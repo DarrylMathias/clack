@@ -49,6 +49,17 @@ pub fn run() -> Result<()> {
         std::fs::create_dir_all(dir)?;
     }
 
+    let file_appender = tracing_appender::rolling::never(
+        log_dir.parent().unwrap(),
+        log_dir.file_name().unwrap(),
+    );
+    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+    
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env().add_directive(tracing::Level::INFO.into()))
+        .with_writer(non_blocking)
+        .init();
+
     let config = Config::load().context("loading config")?;
     let state = State::load().unwrap_or_default();
 
@@ -141,9 +152,11 @@ pub fn run() -> Result<()> {
                 SampleBank::empty()
             };
 
+            let mut rng = fastrand::Rng::new();
             let mut detector = ToggleDetector::default();
 
             loop {
+                engine.gc();
                 // Check for engine-thread messages (non-blocking).
                 while let Ok(msg) = eng_rx.try_recv() {
                     match msg {
@@ -178,9 +191,11 @@ pub fn run() -> Result<()> {
                     }
                 }
 
-                // Key events (with short timeout so we can process EngineMsg).
                 let event = match key_rx.recv_timeout(Duration::from_millis(20)) {
-                    Ok(ev) => ev,
+                    Ok(ev) => {
+                        info!("Engine received key event: {:?}", ev);
+                        ev
+                    },
                     Err(crossbeam_channel::RecvTimeoutError::Timeout) => continue,
                     Err(crossbeam_channel::RecvTimeoutError::Disconnected) => break,
                 };
@@ -204,21 +219,24 @@ pub fn run() -> Result<()> {
                     continue;
                 }
 
-                if let Some(clip) = bank.pick_clip(event.code, is_release) {
+                if let Some(clip) = bank.pick_clip(event.code, is_release, &mut rng) {
+                    info!("Picked clip for key {}", event.code);
                     let samples = clip.samples.clone();
                     let channels = clip.channels;
                     let (rate, gain) = if humanize {
-                        let t = nano_rand();
-                        let pitch = 0.97 + (t & 0xFF) as f32 * (0.06 / 255.0);
-                        let g = 0.90 + ((t >> 8) & 0xFF) as f32 * (0.20 / 255.0);
+                        let pitch = 0.97 + rng.f32() * 0.06; // 0.97 to 1.03
+                        let g = 0.90 + rng.f32() * 0.20; // 0.90 to 1.10
                         (pitch, g)
                     } else {
                         (1.0f32, 1.0f32)
                     };
                     engine.play(samples, channels, rate, gain);
+                } else {
+                    info!("No clip found for key {} (release: {})", event.code, is_release);
                 }
             }
         })?;
+
 
     // Wait briefly for engine to report its sample rate.
     let device_rate = {
@@ -436,13 +454,6 @@ fn fade_env(i: usize, total: usize) -> f32 {
         1.0
     };
     attack.min(release)
-}
-
-fn nano_rand() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.subsec_nanos() as u64)
-        .unwrap_or(42)
 }
 
 // ── Signals ───────────────────────────────────────────────────────────────────

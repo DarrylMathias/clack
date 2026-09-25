@@ -50,7 +50,7 @@ impl SampleBank {
 
     /// Pick a random clip for the given keycode and direction.
     /// Returns None if the bank has no samples at all.
-    pub fn pick_clip(&self, code: crate::types::KeyCode, is_release: bool) -> Option<&Clip> {
+    pub fn pick_clip(&self, code: crate::types::KeyCode, is_release: bool, rng: &mut fastrand::Rng) -> Option<&Clip> {
         let bank = if is_release {
             &self.release
         } else {
@@ -70,12 +70,7 @@ impl SampleBank {
         if clips.is_empty() {
             return None;
         }
-        // Cheap pseudo-random index — no allocation, no locks.
-        let idx = (std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.subsec_nanos())
-            .unwrap_or(0) as usize)
-            % clips.len();
+        let idx = rng.usize(0..clips.len());
         Some(&clips[idx])
     }
 }
@@ -126,6 +121,7 @@ impl Default for Voice {
 pub struct Engine {
     _stream: cpal::Stream,
     pub cmd_tx: Producer<PlayCmd>,
+    pub drop_rx: Consumer<Arc<Vec<f32>>>,
     pub sample_rate: u32,
     pub channels: u16,
     /// Set by the error callback when the stream dies (device removed / switched).
@@ -136,9 +132,20 @@ impl Engine {
     /// Start the audio engine using the default output device.
     pub fn start() -> Result<Self> {
         let host = cpal::default_host();
-        let device = host
+        let mut device = host
             .default_output_device()
             .context("no default audio output device")?;
+
+        if let Ok(devices) = host.output_devices() {
+            for d in devices {
+                if let Ok(name) = d.name() {
+                    if name == "pipewire" || name == "pulse" {
+                        device = d;
+                        break;
+                    }
+                }
+            }
+        }
 
         info!(
             "audio device: {}",
@@ -177,14 +184,16 @@ impl Engine {
 
         // SPSC ring: engine thread → audio callback.
         let (cmd_tx, cmd_rx) = RingBuffer::<PlayCmd>::new(256);
+        // SPSC ring: audio callback → engine thread (for dropping old arcs).
+        let (drop_tx, drop_rx) = RingBuffer::<Arc<Vec<f32>>>::new(256);
 
         let stream_error = Arc::new(AtomicBool::new(false));
         let stream_error_cb = stream_error.clone();
 
         let stream = match supported.sample_format() {
-            SampleFormat::F32 => build_stream::<f32>(&device, &config, cmd_rx, stream_error_cb)?,
-            SampleFormat::I16 => build_stream::<i16>(&device, &config, cmd_rx, stream_error_cb)?,
-            SampleFormat::U16 => build_stream::<u16>(&device, &config, cmd_rx, stream_error_cb)?,
+            SampleFormat::F32 => build_stream::<f32>(&device, &config, cmd_rx, drop_tx, stream_error_cb)?,
+            SampleFormat::I16 => build_stream::<i16>(&device, &config, cmd_rx, drop_tx, stream_error_cb)?,
+            SampleFormat::U16 => build_stream::<u16>(&device, &config, cmd_rx, drop_tx, stream_error_cb)?,
             fmt => anyhow::bail!("unsupported sample format: {fmt:?}"),
         };
 
@@ -194,6 +203,7 @@ impl Engine {
         Ok(Engine {
             _stream: stream,
             cmd_tx,
+            drop_rx,
             sample_rate: sr,
             channels: ch,
             stream_error,
@@ -224,12 +234,18 @@ impl Engine {
     pub fn set_master_gain(&mut self, gain: f32) {
         let _ = self.cmd_tx.push(PlayCmd::MasterGain(gain));
     }
+
+    /// Drain the drop ring so memory is freed on the engine thread.
+    pub fn gc(&mut self) {
+        while let Ok(_) = self.drop_rx.pop() {}
+    }
 }
 
 fn build_stream<S>(
     device: &cpal::Device,
     config: &StreamConfig,
     mut cmd_rx: Consumer<PlayCmd>,
+    mut drop_tx: Producer<Arc<Vec<f32>>>,
     stream_error: Arc<AtomicBool>,
 ) -> Result<cpal::Stream>
 where
@@ -264,7 +280,8 @@ where
                                 i
                             });
                             let v = &mut voices[idx];
-                            v.clip = clip;
+                            let old_clip = std::mem::replace(&mut v.clip, clip);
+                            let _ = drop_tx.push(old_clip);
                             v.channels = clip_ch;
                             v.pos = 0.0;
                             v.rate = rate_scale as f64;
@@ -349,5 +366,34 @@ mod tests {
     fn sample_bank_empty_does_not_panic() {
         let bank = SampleBank::empty();
         assert!(bank.press.is_empty());
+    }
+
+    #[test]
+    fn pick_clip_distribution() {
+        let mut bank = SampleBank::empty();
+        let mut clips = Vec::new();
+        for i in 0..5 {
+            // Use channels to distinguish clips in the test.
+            clips.push(Clip {
+                samples: Arc::new(vec![]),
+                channels: i as u16,
+            });
+        }
+        
+        bank.press = (0..256).map(|_| None).collect();
+        bank.press[30] = Some(clips);
+        
+        let mut rng = fastrand::Rng::new();
+        let mut counts = vec![0; 5];
+        
+        for _ in 0..10_000 {
+            if let Some(c) = bank.pick_clip(30, false, &mut rng) {
+                counts[c.channels as usize] += 1;
+            }
+        }
+        
+        for count in counts {
+            assert!(count > 1500 && count < 2500, "count {} is not ~2000", count);
+        }
     }
 }

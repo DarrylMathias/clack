@@ -74,17 +74,19 @@ fn run_loop(tx: Sender<KeyEvent>, stop: Arc<AtomicBool>) -> Result<()> {
 
     let mut inotify_buf = [0u8; 4096];
 
+    let mut dedupe = DedupeFilter::new();
+
     while !stop.load(Ordering::Relaxed) {
         // Poll each device with a short timeout so we can also check inotify and stop.
         let mut to_remove: Vec<PathBuf> = Vec::new();
         for (path, dev) in &mut devices {
+            let dev_phys = dev.physical_path().unwrap_or("unknown").to_string();
             // fetch_events is non-blocking when there are events; returns immediately if none.
             match dev.fetch_events() {
                 Ok(events) => {
                     for ev in events {
                         if let InputEventKind::Key(key) = ev.kind() {
                             let value = ev.value();
-                            // value: 1 = Down, 0 = Up, 2 = auto-repeat (drop)
                             let state = match value {
                                 1 => KeyState::Down,
                                 0 => KeyState::Up,
@@ -96,19 +98,27 @@ fn run_loop(tx: Sender<KeyEvent>, stop: Arc<AtomicBool>) -> Result<()> {
                                 state,
                                 at: Instant::now(),
                             };
+                            
+                            if !dedupe.filter(&dev_phys, &event) {
+                                continue;
+                            }
+                            
+                            info!("Input thread parsed key event: {:?}", event);
                             if tx.send(event).is_err() {
-                                // Receiver dropped — time to stop.
                                 return Ok(());
                             }
                         }
                     }
                 }
                 Err(e) if e.raw_os_error() == Some(LIBC_ENODEV) => {
-                    debug!("device {} disconnected", path.display());
+                    info!("device {} disconnected", path.display());
                     to_remove.push(path.clone());
                 }
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    // non-blocking
+                }
                 Err(e) => {
-                    warn!("read error on {}: {e}", path.display());
+                    info!("read error on {}: {e}", path.display());
                     to_remove.push(path.clone());
                 }
             }
@@ -145,6 +155,85 @@ fn run_loop(tx: Sender<KeyEvent>, stop: Arc<AtomicBool>) -> Result<()> {
 
     info!("Linux input backend stopped");
     Ok(())
+}
+
+// ── Dedupe Filter ─────────────────────────────────────────────────────────────
+
+struct DedupeFilter {
+    recent_downs: HashMap<(String, KeyCode), Instant>,
+}
+
+impl DedupeFilter {
+    fn new() -> Self {
+        DedupeFilter {
+            recent_downs: HashMap::new(),
+        }
+    }
+
+    /// Returns true if this event should be passed through.
+    fn filter(&mut self, dev_phys: &str, ev: &KeyEvent) -> bool {
+        if ev.state == KeyState::Up {
+            return true;
+        }
+
+        // Extract base phys path, e.g. "usb-0000:00:14.0-2.4/input0" -> "usb-0000:00:14.0-2.4"
+        let base_phys = if let Some(idx) = dev_phys.rfind("/input") {
+            &dev_phys[..idx]
+        } else {
+            dev_phys
+        };
+
+        let key = (base_phys.to_string(), ev.code);
+        let now = Instant::now();
+        
+        if let Some(last_at) = self.recent_downs.get(&key) {
+            if now.duration_since(*last_at).as_millis() < 5 {
+                return false; // dedupe
+            }
+        }
+        
+        self.recent_downs.insert(key, now);
+        
+        // Clean up old entries periodically to prevent unbounded growth.
+        // Doing it probabilistically or lazily is fine.
+        if self.recent_downs.len() > 100 {
+            self.recent_downs.retain(|_, at| now.duration_since(*at).as_millis() < 100);
+        }
+        
+        true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_dedupe_filter() {
+        let mut filter = DedupeFilter::new();
+        let ev = KeyEvent {
+            code: 30,
+            state: KeyState::Down,
+            at: Instant::now(),
+        };
+
+        // First down from keyboard 1 should pass.
+        assert!(filter.filter("usb-0000:00:14.0-2.4/input0", &ev));
+        
+        // Second down from keyboard 2 (same phys root) within 5ms should be filtered.
+        assert!(!filter.filter("usb-0000:00:14.0-2.4/input1", &ev));
+        
+        // Down from entirely different keyboard should pass.
+        assert!(filter.filter("usb-0000:00:14.0-3/input0", &ev));
+        
+        // Up events should always pass.
+        let up_ev = KeyEvent {
+            code: 30,
+            state: KeyState::Up,
+            at: Instant::now(),
+        };
+        assert!(filter.filter("usb-0000:00:14.0-2.4/input1", &up_ev));
+    }
 }
 
 // ── Device helpers ────────────────────────────────────────────────────────────

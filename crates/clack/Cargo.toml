@@ -33,3 +33,4 @@ zip.workspace = true
 crossterm.workspace = true
 dirs.workspace = true
 signal-hook.workspace = true
+fastrand = "2"

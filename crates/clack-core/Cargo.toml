@@ -19,6 +19,7 @@ rtrb.workspace = true
 cpal.workspace = true
 symphonia.workspace = true
 dirs.workspace = true
+fastrand = "2"
 
 [dev-dependencies]
 tempfile = "3"
