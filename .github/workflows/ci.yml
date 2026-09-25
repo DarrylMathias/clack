@@ -48,6 +48,32 @@ jobs:
       - name: Run tests
         run: cargo test --all
 
+      - name: Build Release (Linux)
+        if: runner.os == 'Linux'
+        run: cargo build --release
+
+      - name: Upload Linux Binary
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: clack-linux-x86_64
+          path: target/release/clack
+
+      - name: Build Release (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+          cargo build --release --target aarch64-apple-darwin
+          cargo build --release --target x86_64-apple-darwin
+          lipo -create -output target/release/clack-macos target/aarch64-apple-darwin/release/clack target/x86_64-apple-darwin/release/clack
+
+      - name: Upload macOS Binary
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: clack-macos
+          path: target/release/clack-macos
+
   # Privacy guard: ensure no code logs KeyEvent or KeyCode values (§8)
   privacy-lint:
     name: Privacy lint

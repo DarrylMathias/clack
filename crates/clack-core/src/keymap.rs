@@ -98,18 +98,18 @@ pub fn macos_vk_to_evdev(vk: u16) -> Option<KeyCode> {
         0x39 => 58,  // kVK_CapsLock → KEY_CAPSLOCK
 
         // Function keys
-        0x7A => 59,  // kVK_F1
-        0x78 => 60,  // kVK_F2
-        0x63 => 61,  // kVK_F3
-        0x76 => 62,  // kVK_F4
-        0x60 => 63,  // kVK_F5
-        0x61 => 64,  // kVK_F6
-        0x62 => 65,  // kVK_F7
-        0x64 => 66,  // kVK_F8
-        0x65 => 67,  // kVK_F9
-        0x6D => 68,  // kVK_F10
-        0x67 => 87,  // kVK_F11
-        0x6F => 88,  // kVK_F12
+        0x7A => 59, // kVK_F1
+        0x78 => 60, // kVK_F2
+        0x63 => 61, // kVK_F3
+        0x76 => 62, // kVK_F4
+        0x60 => 63, // kVK_F5
+        0x61 => 64, // kVK_F6
+        0x62 => 65, // kVK_F7
+        0x64 => 66, // kVK_F8
+        0x65 => 67, // kVK_F9
+        0x6D => 68, // kVK_F10
+        0x67 => 87, // kVK_F11
+        0x6F => 88, // kVK_F12
 
         _ => return None,
     };
@@ -160,9 +160,8 @@ mod tests {
     fn macos_ansi_letters_map() {
         // A through Z should all map to something
         let letter_vks: &[u16] = &[
-            0x00, 0x0B, 0x08, 0x02, 0x0E, 0x03, 0x05, 0x04, 0x22, 0x26,
-            0x28, 0x25, 0x2E, 0x2D, 0x1F, 0x23, 0x0C, 0x0F, 0x01, 0x11,
-            0x20, 0x09, 0x0D, 0x07, 0x10, 0x06,
+            0x00, 0x0B, 0x08, 0x02, 0x0E, 0x03, 0x05, 0x04, 0x22, 0x26, 0x28, 0x25, 0x2E, 0x2D,
+            0x1F, 0x23, 0x0C, 0x0F, 0x01, 0x11, 0x20, 0x09, 0x0D, 0x07, 0x10, 0x06,
         ];
         for &vk in letter_vks {
             assert!(

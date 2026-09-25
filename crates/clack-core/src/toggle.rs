@@ -22,9 +22,15 @@ const RIGHT_SHIFT: KeyCode = 54;
 const LEFT_ALT: KeyCode = 56;
 const RIGHT_ALT: KeyCode = 100;
 
-fn is_ctrl(code: KeyCode) -> bool { matches!(code, LEFT_CTRL | RIGHT_CTRL) }
-fn is_shift(code: KeyCode) -> bool { matches!(code, LEFT_SHIFT | RIGHT_SHIFT) }
-fn is_alt(code: KeyCode) -> bool { matches!(code, LEFT_ALT | RIGHT_ALT) }
+fn is_ctrl(code: KeyCode) -> bool {
+    matches!(code, LEFT_CTRL | RIGHT_CTRL)
+}
+fn is_shift(code: KeyCode) -> bool {
+    matches!(code, LEFT_SHIFT | RIGHT_SHIFT)
+}
+fn is_alt(code: KeyCode) -> bool {
+    matches!(code, LEFT_ALT | RIGHT_ALT)
+}
 
 /// State machine for a single double-tap gesture.
 #[derive(Debug, Default)]
@@ -132,15 +138,15 @@ mod tests {
     /// Helper: feed a clean double-tap of left Ctrl with realistic timing.
     fn double_tap(detector: &mut ToggleDetector, start: Instant) -> bool {
         let t0 = start;
-        let t1 = t0 + Duration::from_millis(60);  // first up (tap)
+        let t1 = t0 + Duration::from_millis(60); // first up (tap)
         let t2 = t1 + Duration::from_millis(150); // second down (inter-tap)
-        let t3 = t2 + Duration::from_millis(60);  // second up
+        let t3 = t2 + Duration::from_millis(60); // second up
 
         let binding = ToggleBinding::DoubleCtrl;
         detector.feed(&make_event(LEFT_CTRL, KeyState::Down, t0), &binding);
-        detector.feed(&make_event(LEFT_CTRL, KeyState::Up,   t1), &binding);
+        detector.feed(&make_event(LEFT_CTRL, KeyState::Up, t1), &binding);
         detector.feed(&make_event(LEFT_CTRL, KeyState::Down, t2), &binding);
-        detector.feed(&make_event(LEFT_CTRL, KeyState::Up,   t3), &binding)
+        detector.feed(&make_event(LEFT_CTRL, KeyState::Up, t3), &binding)
     }
 
     #[test]
@@ -155,10 +161,19 @@ mod tests {
         let now = Instant::now();
         let binding = ToggleBinding::DoubleCtrl;
         d.feed(&make_event(LEFT_CTRL, KeyState::Down, now), &binding);
-        d.feed(&make_event(LEFT_CTRL, KeyState::Up,   now + Duration::from_millis(60)), &binding);
+        d.feed(
+            &make_event(LEFT_CTRL, KeyState::Up, now + Duration::from_millis(60)),
+            &binding,
+        );
         // Gap > 350 ms
-        d.feed(&make_event(LEFT_CTRL, KeyState::Down, now + Duration::from_millis(500)), &binding);
-        let fired = d.feed(&make_event(LEFT_CTRL, KeyState::Up, now + Duration::from_millis(560)), &binding);
+        d.feed(
+            &make_event(LEFT_CTRL, KeyState::Down, now + Duration::from_millis(500)),
+            &binding,
+        );
+        let fired = d.feed(
+            &make_event(LEFT_CTRL, KeyState::Up, now + Duration::from_millis(560)),
+            &binding,
+        );
         // Should NOT fire (gap too long) — the second press restarts the sequence
         assert!(!fired);
     }
@@ -169,11 +184,27 @@ mod tests {
         let now = Instant::now();
         let binding = ToggleBinding::DoubleCtrl;
         d.feed(&make_event(LEFT_CTRL, KeyState::Down, now), &binding);
-        d.feed(&make_event(LEFT_CTRL, KeyState::Up,   now + Duration::from_millis(50)), &binding);
+        d.feed(
+            &make_event(LEFT_CTRL, KeyState::Up, now + Duration::from_millis(50)),
+            &binding,
+        );
         // A non-trigger key in the gap
-        d.feed(&make_event(30 /* KEY_A */, KeyState::Down, now + Duration::from_millis(100)), &binding);
-        d.feed(&make_event(LEFT_CTRL, KeyState::Down, now + Duration::from_millis(150)), &binding);
-        let fired = d.feed(&make_event(LEFT_CTRL, KeyState::Up, now + Duration::from_millis(200)), &binding);
+        d.feed(
+            &make_event(
+                30, /* KEY_A */
+                KeyState::Down,
+                now + Duration::from_millis(100),
+            ),
+            &binding,
+        );
+        d.feed(
+            &make_event(LEFT_CTRL, KeyState::Down, now + Duration::from_millis(150)),
+            &binding,
+        );
+        let fired = d.feed(
+            &make_event(LEFT_CTRL, KeyState::Up, now + Duration::from_millis(200)),
+            &binding,
+        );
         assert!(!fired);
     }
 
@@ -183,7 +214,10 @@ mod tests {
         let now = Instant::now();
         let binding = ToggleBinding::None;
         d.feed(&make_event(LEFT_CTRL, KeyState::Down, now), &binding);
-        let fired = d.feed(&make_event(LEFT_CTRL, KeyState::Up, now + Duration::from_millis(50)), &binding);
+        let fired = d.feed(
+            &make_event(LEFT_CTRL, KeyState::Up, now + Duration::from_millis(50)),
+            &binding,
+        );
         assert!(!fired);
     }
 

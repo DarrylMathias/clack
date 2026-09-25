@@ -40,7 +40,10 @@ pub fn send(cmd: &Command) -> Result<Response> {
 pub fn send_ok(cmd: &Command) -> Result<Response> {
     let resp = send(cmd)?;
     if !resp.ok {
-        bail!("{}", resp.error.as_deref().unwrap_or("unknown daemon error"));
+        bail!(
+            "{}",
+            resp.error.as_deref().unwrap_or("unknown daemon error")
+        );
     }
     Ok(resp)
 }

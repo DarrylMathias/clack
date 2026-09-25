@@ -4,11 +4,7 @@
 //! and resamples (nearest-neighbour) to the target sample rate.
 //! The result is a `SampleBank` ready for the audio engine.
 
-use std::{
-    fs,
-    path::Path,
-    sync::Arc,
-};
+use std::{fs, path::Path, sync::Arc};
 
 use anyhow::{bail, Context, Result};
 use symphonia::core::{
@@ -45,13 +41,17 @@ pub fn load_pack(pack_dir: &Path, target_rate: u32) -> Result<SampleBank> {
     };
 
     let resolve = |sound_ref: &SoundRef| -> Vec<Clip> {
-        resolve_clip(sound_ref, pack_dir, sprite_decoded.as_ref(), target_rate)
-            .unwrap_or_default()
+        resolve_clip(sound_ref, pack_dir, sprite_decoded.as_ref(), target_rate).unwrap_or_default()
     };
 
     // Build press map.
     let mut press_map: Vec<Option<Vec<Clip>>> = vec![None; 256];
-    let press_default = manifest.press.default.as_ref().map(|r| resolve(r)).unwrap_or_default();
+    let press_default = manifest
+        .press
+        .default
+        .as_ref()
+        .map(&resolve)
+        .unwrap_or_default();
 
     for (code_str, sound_ref) in &manifest.press.keys {
         if let Ok(code) = code_str.parse::<usize>() {
@@ -63,7 +63,7 @@ pub fn load_pack(pack_dir: &Path, target_rate: u32) -> Result<SampleBank> {
 
     // Build release map (optional).
     let (release_map, release_default) = if let Some(ref rel) = manifest.release {
-        let def = rel.default.as_ref().map(|r| resolve(r)).unwrap_or_default();
+        let def = rel.default.as_ref().map(&resolve).unwrap_or_default();
         let mut map: Vec<Option<Vec<Clip>>> = vec![None; 256];
         for (code_str, sound_ref) in &rel.keys {
             if let Ok(code) = code_str.parse::<usize>() {
@@ -99,18 +99,25 @@ fn resolve_clip(
                 sprite.context("manifest uses sprite ranges but no sprite file loaded")?;
             let start_frame = (*start_ms as f64 * *sprite_rate as f64 / 1000.0) as usize;
             let dur_frames = (*dur_ms as f64 * *sprite_rate as f64 / 1000.0) as usize;
-            let end_frame = (start_frame + dur_frames).min(sprite_samples.len() / *channels as usize);
+            let end_frame =
+                (start_frame + dur_frames).min(sprite_samples.len() / *channels as usize);
             let ch = *channels as usize;
             let raw: Vec<f32> = sprite_samples[start_frame * ch..end_frame * ch].to_vec();
             let resampled = resample(&raw, *sprite_rate, target_rate, *channels);
-            Ok(vec![Clip { samples: Arc::new(resampled), channels: *channels }])
+            Ok(vec![Clip {
+                samples: Arc::new(resampled),
+                channels: *channels,
+            }])
         }
         SoundRef::File(rel_path) => {
             let path = pack_dir.join(rel_path);
-            let (raw, src_rate, channels) = decode_file(&path)
-                .with_context(|| format!("decoding {}", path.display()))?;
+            let (raw, src_rate, channels) =
+                decode_file(&path).with_context(|| format!("decoding {}", path.display()))?;
             let resampled = resample(&raw, src_rate, target_rate, channels);
-            Ok(vec![Clip { samples: Arc::new(resampled), channels }])
+            Ok(vec![Clip {
+                samples: Arc::new(resampled),
+                channels,
+            }])
         }
         SoundRef::Multi(refs) => {
             let mut clips = Vec::new();
@@ -136,7 +143,12 @@ fn decode_file(path: &Path) -> Result<(Vec<f32>, u32, u16)> {
     }
 
     let probed = symphonia::default::get_probe()
-        .format(&hint, mss, &FormatOptions::default(), &MetadataOptions::default())
+        .format(
+            &hint,
+            mss,
+            &FormatOptions::default(),
+            &MetadataOptions::default(),
+        )
         .with_context(|| format!("probing {}", path.display()))?;
 
     let mut format = probed.format;
@@ -147,10 +159,7 @@ fn decode_file(path: &Path) -> Result<(Vec<f32>, u32, u16)> {
         .context("no audio track found")?;
 
     let track_id = track.id;
-    let sample_rate = track
-        .codec_params
-        .sample_rate
-        .unwrap_or(44100);
+    let sample_rate = track.codec_params.sample_rate.unwrap_or(44100);
     let channels = track
         .codec_params
         .channels

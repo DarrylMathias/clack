@@ -102,8 +102,8 @@ pub enum PackCommands {
 
 impl Cli {
     pub fn run(self) -> anyhow::Result<()> {
-        use clack_core::ipc::Command;
         use crate::ipc_client::{send, send_ok};
+        use clack_core::ipc::Command;
 
         match self.command {
             None => {
@@ -234,7 +234,8 @@ impl Cli {
 fn print_status(s: &clack_core::ipc::DaemonStatus) {
     let mute_str = if s.muted { "muted" } else { "active" };
     let pack = s.active_pack.as_deref().unwrap_or("none");
-    println!("clack  {mute_str}  |  pack: {pack}  |  volume: {}  |  keyboards: {}",
+    println!(
+        "clack  {mute_str}  |  pack: {pack}  |  volume: {}  |  keyboards: {}",
         s.volume,
         s.keyboards_detected.len(),
     );

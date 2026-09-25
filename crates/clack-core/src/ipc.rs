@@ -37,11 +37,19 @@ pub struct Response {
 
 impl Response {
     pub fn ok(status: Option<DaemonStatus>) -> Self {
-        Response { ok: true, status, error: None }
+        Response {
+            ok: true,
+            status,
+            error: None,
+        }
     }
 
     pub fn err(msg: impl Into<String>) -> Self {
-        Response { ok: false, status: None, error: Some(msg.into()) }
+        Response {
+            ok: false,
+            status: None,
+            error: Some(msg.into()),
+        }
     }
 }
 
@@ -51,7 +59,9 @@ mod tests {
 
     #[test]
     fn command_roundtrip_json() {
-        let cmd = Command::Use { pack: "ibm-model-m".into() };
+        let cmd = Command::Use {
+            pack: "ibm-model-m".into(),
+        };
         let json = serde_json::to_string(&cmd).unwrap();
         let back: Command = serde_json::from_str(&json).unwrap();
         assert!(matches!(back, Command::Use { pack } if pack == "ibm-model-m"));

@@ -32,7 +32,7 @@ pub struct Clip {
 /// A collection of clips indexed by evdev keycode.
 /// `press[code]` is tried first, then `press_default`.
 pub struct SampleBank {
-    pub press: Vec<Option<Vec<Clip>>>,   // indexed by KeyCode (up to 256 useful codes)
+    pub press: Vec<Option<Vec<Clip>>>, // indexed by KeyCode (up to 256 useful codes)
     pub press_default: Vec<Clip>,
     pub release: Vec<Option<Vec<Clip>>>,
     pub release_default: Vec<Clip>,
@@ -51,8 +51,16 @@ impl SampleBank {
     /// Pick a random clip for the given keycode and direction.
     /// Returns None if the bank has no samples at all.
     pub fn pick_clip(&self, code: crate::types::KeyCode, is_release: bool) -> Option<&Clip> {
-        let bank = if is_release { &self.release } else { &self.press };
-        let default = if is_release { &self.release_default } else { &self.press_default };
+        let bank = if is_release {
+            &self.release
+        } else {
+            &self.press
+        };
+        let default = if is_release {
+            &self.release_default
+        } else {
+            &self.press_default
+        };
 
         let clips: &[Clip] = bank
             .get(code as usize)
@@ -93,8 +101,8 @@ const MAX_VOICES: usize = 32;
 struct Voice {
     clip: Arc<Vec<f32>>,
     channels: u16,
-    pos: f64,       // current read position in frames (fractional for pitch shift)
-    rate: f64,      // frames per output frame (1.0 = no pitch shift)
+    pos: f64,  // current read position in frames (fractional for pitch shift)
+    rate: f64, // frames per output frame (1.0 = no pitch shift)
     gain: f32,
     active: bool,
 }
@@ -183,7 +191,13 @@ impl Engine {
         stream.play().context("starting audio stream")?;
         let sr = supported.sample_rate().0;
         let ch = supported.channels();
-        Ok(Engine { _stream: stream, cmd_tx, sample_rate: sr, channels: ch, stream_error })
+        Ok(Engine {
+            _stream: stream,
+            cmd_tx,
+            sample_rate: sr,
+            channels: ch,
+            stream_error,
+        })
     }
 
     /// Rebuild the engine when the audio device changes (headphones in/out, default changed).
@@ -199,7 +213,12 @@ impl Engine {
 
     /// Convenience: send a play command (best-effort, silently drops if ring full).
     pub fn play(&mut self, clip: Arc<Vec<f32>>, channels: u16, rate_scale: f32, gain: f32) {
-        let _ = self.cmd_tx.push(PlayCmd::Play { clip, channels, rate_scale, gain });
+        let _ = self.cmd_tx.push(PlayCmd::Play {
+            clip,
+            channels,
+            rate_scale,
+            gain,
+        });
     }
 
     pub fn set_master_gain(&mut self, gain: f32) {
@@ -219,7 +238,9 @@ where
     let channels = config.channels as usize;
     let mut voices: [Voice; MAX_VOICES] = Default::default();
     // Initialize active flags (can't derive Default for the array otherwise).
-    for v in voices.iter_mut() { v.active = false; }
+    for v in voices.iter_mut() {
+        v.active = false;
+    }
     let mut master_gain: f32 = 1.0;
     let mut next_victim: usize = 0; // round-robin voice steal index
 
@@ -230,16 +251,18 @@ where
                 // Drain the command ring — NO allocations, locks, or Arc drops here.
                 while let Ok(cmd) = cmd_rx.pop() {
                     match cmd {
-                        PlayCmd::Play { clip, channels: clip_ch, rate_scale, gain } => {
+                        PlayCmd::Play {
+                            clip,
+                            channels: clip_ch,
+                            rate_scale,
+                            gain,
+                        } => {
                             // Find a free voice; steal the oldest (round-robin) if full.
-                            let idx = voices
-                                .iter()
-                                .position(|v| !v.active)
-                                .unwrap_or_else(|| {
-                                    let i = next_victim;
-                                    next_victim = (next_victim + 1) % MAX_VOICES;
-                                    i
-                                });
+                            let idx = voices.iter().position(|v| !v.active).unwrap_or_else(|| {
+                                let i = next_victim;
+                                next_victim = (next_victim + 1) % MAX_VOICES;
+                                i
+                            });
                             let v = &mut voices[idx];
                             v.clip = clip;
                             v.channels = clip_ch;
@@ -285,8 +308,8 @@ where
                     } else {
                         out_frame[0] = S::from_sample(left.clamp(-1.0, 1.0));
                         out_frame[1] = S::from_sample(right.clamp(-1.0, 1.0));
-                        for ch in 2..channels {
-                            out_frame[ch] = S::from_sample(0.0f32);
+                        for out_sample in out_frame.iter_mut().take(channels).skip(2) {
+                            *out_sample = S::from_sample(0.0f32);
                         }
                     }
                 }

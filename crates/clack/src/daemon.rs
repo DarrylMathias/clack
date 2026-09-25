@@ -66,9 +66,7 @@ pub fn run() -> Result<()> {
 
     // Shared state (IPC thread ↔ engine thread and IPC thread ↔ status endpoint).
     let muted = Arc::new(AtomicBool::new(state.muted));
-    let master_gain_bits = Arc::new(AtomicU32::new(
-        perceptual_gain(config.volume).to_bits(),
-    ));
+    let master_gain_bits = Arc::new(AtomicU32::new(perceptual_gain(config.volume).to_bits()));
     let active_pack_name = Arc::new(Mutex::new(config.default_pack.clone()));
 
     // Channel: main/IPC → engine thread.
@@ -102,7 +100,6 @@ pub fn run() -> Result<()> {
     let muted_eng = muted.clone();
 
     let default_pack_name = config.default_pack.clone();
-    let eng_tx_clone = eng_tx.clone(); // so IPC thread can send
 
     thread::Builder::new()
         .name("clack-engine".into())
@@ -110,7 +107,10 @@ pub fn run() -> Result<()> {
             // Start audio engine on this thread.
             let mut engine = match Engine::start() {
                 Ok(e) => e,
-                Err(e) => { error!("audio engine failed: {e:#}"); return; }
+                Err(e) => {
+                    error!("audio engine failed: {e:#}");
+                    return;
+                }
             };
 
             let device_rate = engine.sample_rate;
@@ -127,8 +127,14 @@ pub fn run() -> Result<()> {
             let pdir = pack_dir(&default_pack_name);
             let mut bank = if pdir.exists() {
                 match load_pack(&pdir, device_rate) {
-                    Ok(b) => { info!("pack '{default_pack_name}' loaded"); b }
-                    Err(e) => { warn!("pack load failed: {e:#}"); SampleBank::empty() }
+                    Ok(b) => {
+                        info!("pack '{default_pack_name}' loaded");
+                        b
+                    }
+                    Err(e) => {
+                        warn!("pack load failed: {e:#}");
+                        SampleBank::empty()
+                    }
                 }
             } else {
                 warn!("pack '{default_pack_name}' not found");
@@ -150,7 +156,9 @@ pub fn run() -> Result<()> {
                             // Reload config and pack inside the engine thread.
                             if let Ok(cfg) = Config::load() {
                                 let pdir = pack_dir(&cfg.default_pack);
-                                if let Ok(new_bank) = load_pack(&pdir, device_rate_for_eng.load(Ordering::Relaxed)) {
+                                if let Ok(new_bank) =
+                                    load_pack(&pdir, device_rate_for_eng.load(Ordering::Relaxed))
+                                {
                                     bank = new_bank;
                                     info!("reloaded pack '{}'", cfg.default_pack);
                                 }
@@ -217,7 +225,9 @@ pub fn run() -> Result<()> {
         let deadline = std::time::Instant::now() + Duration::from_secs(3);
         loop {
             let r = device_rate_shared.load(Ordering::Relaxed);
-            if r > 0 { break r; }
+            if r > 0 {
+                break r;
+            }
             if std::time::Instant::now() > deadline {
                 warn!("engine rate not reported; using 48000");
                 break 48_000;
@@ -230,12 +240,12 @@ pub fn run() -> Result<()> {
     info!("IPC socket: {}", sock_path.display());
 
     loop {
-        if SHUTDOWN.load(Ordering::Relaxed) {
+        if get_shutdown().load(Ordering::Relaxed) {
             info!("shutdown requested");
             break;
         }
-        if RELOAD.load(Ordering::Relaxed) {
-            RELOAD.store(false, Ordering::Relaxed);
+        if get_reload().load(Ordering::Relaxed) {
+            get_reload().store(false, Ordering::Relaxed);
             let _ = eng_tx.send(EngineMsg::Reload);
         }
 
@@ -256,9 +266,8 @@ pub fn run() -> Result<()> {
                         ),
                         Err(e) => Response::err(format!("bad command: {e}")),
                     };
-                    let _ = stream.write_all(
-                        (serde_json::to_string(&resp).unwrap() + "\n").as_bytes(),
-                    );
+                    let _ =
+                        stream.write_all((serde_json::to_string(&resp).unwrap() + "\n").as_bytes());
                 }
             }
             Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
@@ -339,7 +348,7 @@ fn handle_ipc(
             Response::ok(None)
         }
         Command::Shutdown => {
-            SHUTDOWN.store(true, Ordering::SeqCst);
+            get_shutdown().store(true, Ordering::SeqCst);
             Response::ok(None)
         }
     }
@@ -350,7 +359,11 @@ fn handle_ipc(
 fn play_tone(engine: &mut Engine, unmuting: bool) {
     let rate = engine.sample_rate;
     let frames = (rate * 80 / 1000) as usize;
-    let (f1, f2) = if unmuting { (440.0f32, 660.0f32) } else { (660.0f32, 440.0f32) };
+    let (f1, f2) = if unmuting {
+        (440.0f32, 660.0f32)
+    } else {
+        (660.0f32, 440.0f32)
+    };
 
     let make_beep = |freq: f32| -> std::sync::Arc<Vec<f32>> {
         std::sync::Arc::new(
@@ -367,18 +380,23 @@ fn play_tone(engine: &mut Engine, unmuting: bool) {
     engine.play(make_beep(f1), 1, 1.0, 1.0);
     // 30 ms gap between beeps (silent clip).
     let gap_frames = (rate * 30 / 1000) as usize;
-    engine.play(
-        std::sync::Arc::new(vec![0.0f32; gap_frames]),
-        1, 1.0, 0.0,
-    );
+    engine.play(std::sync::Arc::new(vec![0.0f32; gap_frames]), 1, 1.0, 0.0);
     engine.play(make_beep(f2), 1, 1.0, 1.0);
 }
 
 fn fade_env(i: usize, total: usize) -> f32 {
     let fade = (total / 10).max(1);
-    let attack = if i < fade { i as f32 / fade as f32 } else { 1.0 };
+    let attack = if i < fade {
+        i as f32 / fade as f32
+    } else {
+        1.0
+    };
     let rel_start = total.saturating_sub(fade);
-    let release = if i > rel_start { (total - i) as f32 / fade as f32 } else { 1.0 };
+    let release = if i > rel_start {
+        (total - i) as f32 / fade as f32
+    } else {
+        1.0
+    };
     attack.min(release)
 }
 
@@ -391,26 +409,26 @@ fn nano_rand() -> u64 {
 
 // ── Signals ───────────────────────────────────────────────────────────────────
 
-static SHUTDOWN: AtomicBool = AtomicBool::new(false);
-static RELOAD: AtomicBool = AtomicBool::new(false);
+use std::sync::OnceLock;
+
+static SHUTDOWN: OnceLock<Arc<AtomicBool>> = OnceLock::new();
+static RELOAD: OnceLock<Arc<AtomicBool>> = OnceLock::new();
+
+fn get_shutdown() -> Arc<AtomicBool> {
+    SHUTDOWN
+        .get_or_init(|| Arc::new(AtomicBool::new(false)))
+        .clone()
+}
+fn get_reload() -> Arc<AtomicBool> {
+    RELOAD
+        .get_or_init(|| Arc::new(AtomicBool::new(false)))
+        .clone()
+}
 
 pub fn install_signal_handler() {
     #[cfg(unix)]
-    unsafe {
-        libc_signal(15, sigterm_handler as usize); // SIGTERM
-        libc_signal(1, sighup_handler as usize);   // SIGHUP
+    {
+        let _ = signal_hook::flag::register(signal_hook::consts::SIGTERM, get_shutdown());
+        let _ = signal_hook::flag::register(signal_hook::consts::SIGHUP, get_reload());
     }
-}
-
-extern "C" fn sigterm_handler(_: i32) {
-    SHUTDOWN.store(true, Ordering::SeqCst);
-}
-extern "C" fn sighup_handler(_: i32) {
-    RELOAD.store(true, Ordering::SeqCst);
-}
-
-#[cfg(unix)]
-unsafe fn libc_signal(sig: i32, handler: usize) {
-    extern "C" { fn signal(signum: i32, handler: usize) -> usize; }
-    signal(sig, handler);
 }

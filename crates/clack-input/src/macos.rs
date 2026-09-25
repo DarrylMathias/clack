@@ -107,11 +107,7 @@ mod ffi {
             order: std::ffi::c_long,
         ) -> CFRunLoopSourceRef;
         pub fn CFRunLoopGetCurrent() -> CFRunLoopRef;
-        pub fn CFRunLoopAddSource(
-            rl: CFRunLoopRef,
-            source: CFRunLoopSourceRef,
-            mode: CFStringRef,
-        );
+        pub fn CFRunLoopAddSource(rl: CFRunLoopRef, source: CFRunLoopSourceRef, mode: CFStringRef);
         pub fn CFRunLoopRun();
         pub fn CFRunLoopStop(rl: CFRunLoopRef);
         pub fn CFRelease(obj: *const std::ffi::c_void);
@@ -156,7 +152,9 @@ fn flags_bit_to_vk(bit: u64) -> Option<u16> {
     }
 }
 
-const MODIFIER_BITS: &[u64] = &[FLAG_SHIFT, FLAG_CTRL, FLAG_ALT, FLAG_CMD, FLAG_CAPS, FLAG_FN];
+const MODIFIER_BITS: &[u64] = &[
+    FLAG_SHIFT, FLAG_CTRL, FLAG_ALT, FLAG_CMD, FLAG_CAPS, FLAG_FN,
+];
 
 // ── CGEventTap callback ───────────────────────────────────────────────────────
 
@@ -202,7 +200,11 @@ unsafe extern "C" fn tap_callback(
                 } else {
                     KeyState::Up
                 };
-                let ev = KeyEvent { code, state: key_state, at: Instant::now() };
+                let ev = KeyEvent {
+                    code,
+                    state: key_state,
+                    at: Instant::now(),
+                };
                 // Best-effort send; if the channel is closed, we just drop.
                 let _ = state.tx.send(ev);
             }
@@ -225,7 +227,11 @@ unsafe extern "C" fn tap_callback(
                 };
                 if let Some(code) = macos_vk_to_evdev(vk) {
                     let key_state = if is_set { KeyState::Down } else { KeyState::Up };
-                    let ev = KeyEvent { code, state: key_state, at: Instant::now() };
+                    let ev = KeyEvent {
+                        code,
+                        state: key_state,
+                        at: Instant::now(),
+                    };
                     let _ = state.tx.send(ev);
                 }
             }
@@ -301,11 +307,7 @@ impl InputBackend for MacosInput {
 
         // Wire the tap into a CFRunLoopSource and run the loop on this thread.
         unsafe {
-            let source = ffi::CFMachPortCreateRunLoopSource(
-                std::ptr::null(),
-                tap,
-                0,
-            );
+            let source = ffi::CFMachPortCreateRunLoopSource(std::ptr::null(), tap, 0);
             let rl = ffi::CFRunLoopGetCurrent();
             ffi::CFRunLoopAddSource(rl, source, ffi::kCFRunLoopCommonModes);
             ffi::CGEventTapEnable(tap, 1);

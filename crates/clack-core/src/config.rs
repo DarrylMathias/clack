@@ -5,19 +5,14 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 /// Toggle hotkey binding.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum ToggleBinding {
+    #[default]
     DoubleCtrl,
     DoubleShift,
     DoubleAlt,
     None,
-}
-
-impl Default for ToggleBinding {
-    fn default() -> Self {
-        ToggleBinding::DoubleCtrl
-    }
 }
 
 impl std::fmt::Display for ToggleBinding {
@@ -76,8 +71,7 @@ impl Config {
             std::fs::create_dir_all(dir)?;
         }
         let raw = toml::to_string_pretty(self)?;
-        std::fs::write(&path, raw)
-            .with_context(|| format!("writing config {}", path.display()))
+        std::fs::write(&path, raw).with_context(|| format!("writing config {}", path.display()))
     }
 }
 

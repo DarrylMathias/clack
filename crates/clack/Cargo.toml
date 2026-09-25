@@ -32,3 +32,4 @@ tar.workspace = true
 zip.workspace = true
 crossterm.workspace = true
 dirs.workspace = true
+signal-hook.workspace = true

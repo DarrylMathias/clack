@@ -11,7 +11,10 @@ use std::{
     collections::HashMap,
     fs,
     path::{Path, PathBuf},
-    sync::{atomic::{AtomicBool, Ordering}, Arc},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
     time::Instant,
 };
 
@@ -46,7 +49,9 @@ fn run_loop(tx: Sender<KeyEvent>, stop: Arc<AtomicBool>) -> Result<()> {
     let mut devices: HashMap<PathBuf, Device> = HashMap::new();
     for path in enumerate_keyboards() {
         match open_device(&path) {
-            Ok(dev) => { devices.insert(path, dev); }
+            Ok(dev) => {
+                devices.insert(path, dev);
+            }
             Err(e) => warn!("skipping {}: {e}", path.display()),
         }
     }
@@ -61,7 +66,10 @@ fn run_loop(tx: Sender<KeyEvent>, stop: Arc<AtomicBool>) -> Result<()> {
     let mut inotify = Inotify::init().context("initialising inotify")?;
     inotify
         .watches()
-        .add(INPUT_DIR, WatchMask::CREATE | WatchMask::DELETE | WatchMask::ATTRIB)
+        .add(
+            INPUT_DIR,
+            WatchMask::CREATE | WatchMask::DELETE | WatchMask::ATTRIB,
+        )
         .context("adding inotify watch on /dev/input")?;
 
     let mut inotify_buf = [0u8; 4096];
@@ -83,7 +91,11 @@ fn run_loop(tx: Sender<KeyEvent>, stop: Arc<AtomicBool>) -> Result<()> {
                                 _ => continue, // drop auto-repeat
                             };
                             let code = key_to_evdev_code(key);
-                            let event = KeyEvent { code, state, at: Instant::now() };
+                            let event = KeyEvent {
+                                code,
+                                state,
+                                at: Instant::now(),
+                            };
                             if tx.send(event).is_err() {
                                 // Receiver dropped — time to stop.
                                 return Ok(());
@@ -147,7 +159,9 @@ fn is_event_node(path: &Path) -> bool {
 
 /// List all /dev/input/eventN paths that look like keyboards.
 fn enumerate_keyboards() -> Vec<PathBuf> {
-    let Ok(entries) = fs::read_dir(INPUT_DIR) else { return vec![] };
+    let Ok(entries) = fs::read_dir(INPUT_DIR) else {
+        return vec![];
+    };
     entries
         .filter_map(|e| e.ok())
         .map(|e| e.path())
@@ -157,8 +171,12 @@ fn enumerate_keyboards() -> Vec<PathBuf> {
 
 /// Heuristic: the device reports EV_KEY and has KEY_A through KEY_Z and KEY_SPACE.
 fn is_keyboard(path: &Path) -> bool {
-    let Ok(dev) = Device::open(path) else { return false };
-    let Some(supported) = dev.supported_keys() else { return false };
+    let Ok(dev) = Device::open(path) else {
+        return false;
+    };
+    let Some(supported) = dev.supported_keys() else {
+        return false;
+    };
     supported.contains(Key::KEY_A)
         && supported.contains(Key::KEY_Z)
         && supported.contains(Key::KEY_SPACE)

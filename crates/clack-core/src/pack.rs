@@ -31,9 +31,7 @@ pub struct SoundMap {
 impl SoundMap {
     /// Look up a keycode, falling back to the default.
     pub fn get(&self, code: KeyCode) -> Option<&SoundRef> {
-        self.keys
-            .get(&code.to_string())
-            .or(self.default.as_ref())
+        self.keys.get(&code.to_string()).or(self.default.as_ref())
     }
 }
 
@@ -110,8 +108,10 @@ mod tests {
 
     #[test]
     fn soundmap_lookup_falls_back_to_default() {
-        let mut map = SoundMap::default();
-        map.default = Some(SoundRef::Sprite([0, 90]));
+        let mut map = SoundMap {
+            default: Some(SoundRef::Sprite([0, 90])),
+            ..Default::default()
+        };
         map.keys.insert("57".into(), SoundRef::Sprite([2000, 110]));
 
         // Space (57) has a specific entry
