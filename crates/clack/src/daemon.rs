@@ -65,12 +65,22 @@ pub fn run() -> Result<()> {
 
     info!("clack daemon starting — pack: {}", config.default_pack);
 
+    install_signal_handler();
+
     // Single-instance guard via socket bind.
     let sock_path = socket_path();
     if let Some(dir) = sock_path.parent() {
         std::fs::create_dir_all(dir)?;
     }
-    let _ = std::fs::remove_file(&sock_path);
+    if sock_path.exists() {
+        if std::os::unix::net::UnixStream::connect(&sock_path).is_ok() {
+            eprintln!("clack is already running.");
+            std::process::exit(1);
+        } else {
+            // Stale socket, remove it.
+            let _ = std::fs::remove_file(&sock_path);
+        }
+    }
     let listener = UnixListener::bind(&sock_path)
         .with_context(|| format!("binding IPC socket at {}", sock_path.display()))?;
     listener.set_nonblocking(true)?;

@@ -9,28 +9,14 @@ This document is extremely detailed to ensure the next agent understands exactly
 > ## ▶ NEXT AGENT — START HERE (updated 2026-09-25)
 >
 > **Goal: an end-to-end working prototype on Darryl's machine (Arch + Hyprland).** He wants to install it, type anywhere,
-> and hear keyboard sounds, with clack starting at login. **Scope: M0 → M1 → M2 in `further.md`, back to back.**
-> M3 and M4 are out of scope. Do not wait for Darryl's M1 listening feedback before starting M2.
+> and hear keyboard sounds, with clack starting at login. **Scope: M2.11 - M2.13 (Pack Manager) -> M3 (Onboarding).**
 >
-> **An audit found:** CI has **never run** (see M0.0), clippy/fmt fail, no pack has ever loaded, and clack has never made a sound.
-> Treat the "✅ Done" marks below as "written, not yet verified".
->
-> **Order of work:**
-> 1. **M0.0 — fix CI first.** ✅ Done. Branch renamed, gh workflow triggered.
-> 2. **M0.1–M0.6:** hygiene, clippy, warnings, fmt, macOS compile check, CI binary artifacts. ✅ Done.
-> 3. **M1.1–M1.5:** input example, Mechvibes importer, local `pack add`, udev rule, first sound. ✅ Done.
-> 4. **M2 (all):** audio fixes, dedupe, key-code check, start at login, automated udev setup, single instance, pack manager.
->
-> **Practical notes:**
-> - **sudo:** Darryl will type the password. When a step needs sudo, stop and give him the exact command. Never try to get around it.
-> - **Packs for the prototype:** the `clack-packs` repo does not exist yet (that's M3). Clone `hainguyents13/mechvibes` and import
->   Darryl's six Mechvibes picks (`further.md` → "Starter set"). Build the catalog client (M2.11) against a fixture served
->   locally, with the index URL overridable via `CLACK_INDEX_URL`. `clack list` and `clack use` must work with local packs alone.
-> - **Hardware:** there's no multi-node keyboard and no second sample rate here (all outputs are 48 kHz), so verify M2.6 and M2.4 with unit/fake tests
->   and mark the real-hardware check as "pending hardware".
-> - **Log every run** (command + output) in this file, following `further.md` §1 (Definition of Done).
-> - **At the end,** hand Darryl a short "try it" script: install the udev rule, `clack setup --permissions-only`, start the service,
->   `clack use cherrymx-blue-pbt`, then the reboot test. His day of use is the M2 exit check.
+> M2 (core fixes and linux service/permissions) has been completed up to M2.10. 
+> Dedupe is tested. Single instance socket is implemented.
+> 
+> **Next steps:**
+> - M2.11-M2.13: `clack list`, `clack pack add`, Catalog fetching.
+> - Handover to Darryl to test the service manually.
 
 ---
 

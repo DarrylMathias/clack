@@ -72,6 +72,8 @@ pub enum Commands {
     Setup {
         #[arg(long, help = "Redo everything from scratch")]
         reset: bool,
+        #[arg(long)]
+        permissions_only: bool,
     },
     /// Find and fix problems
     Doctor,
@@ -223,8 +225,12 @@ impl Cli {
                 }
             }
 
-            Some(Commands::Setup { reset }) => {
-                println!("TODO: setup (reset={reset}) — coming in P3.3");
+            Some(Commands::Setup { reset, permissions_only }) => {
+                if permissions_only {
+                    crate::perms::setup_permissions()?;
+                } else {
+                    println!("TODO: setup (reset={reset}) — coming in P3.3");
+                }
                 Ok(())
             }
 
