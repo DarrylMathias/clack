@@ -21,7 +21,7 @@ pub fn install_and_start() -> Result<()> {
             After=graphical-session.target\n\
             \n\
             [Service]\n\
-            ExecStart={}\n\
+            ExecStart=\"{}\" daemon\n\
             Restart=always\n\
             \n\
             [Install]\n\
@@ -42,7 +42,7 @@ pub fn install_and_start() -> Result<()> {
             "[Desktop Entry]\n\
             Type=Application\n\
             Name=Clack\n\
-            Exec={}\n\
+            Exec=\"{}\" daemon\n\
             Hidden=false\n\
             NoDisplay=false\n\
             X-GNOME-Autostart-enabled=true\n",

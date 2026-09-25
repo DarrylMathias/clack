@@ -179,29 +179,17 @@ impl Cli {
             }
 
             Some(Commands::Start) => {
-                // Spawn the daemon in the background.
-                std::process::Command::new(std::env::current_exe()?)
-                    .arg("daemon")
-                    .spawn()
-                    .map_err(|e| anyhow::anyhow!("failed to start daemon: {e}"))?;
-                println!("clack started");
+                crate::service::install_and_start()?;
                 Ok(())
             }
 
             Some(Commands::Stop) => {
-                send_ok(&Command::Shutdown)?;
-                println!("clack stopped");
+                crate::service::stop()?;
                 Ok(())
             }
 
             Some(Commands::Restart) => {
-                let _ = send_ok(&Command::Shutdown);
-                std::thread::sleep(std::time::Duration::from_millis(500));
-                std::process::Command::new(std::env::current_exe()?)
-                    .arg("daemon")
-                    .spawn()
-                    .map_err(|e| anyhow::anyhow!("failed to restart daemon: {e}"))?;
-                println!("clack restarted");
+                crate::service::restart()?;
                 Ok(())
             }
 

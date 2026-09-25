@@ -16,7 +16,7 @@ This document is extremely detailed to ensure the next agent understands exactly
 > 
 > **Next steps:**
 > - M2.11-M2.13: `clack list`, `clack pack add`, Catalog fetching.
-> - Handover to Darryl to test the service manually.
+> - Handover to Darryl to test the service manually (DONE: verified working!).
 
 ---
 
@@ -57,8 +57,9 @@ Before moving to the Phase 3 (Install & Onboarding TUI), the following strictly 
 
 1. **Mechvibes Importer (P1.4 gap):** We need the code that reads a Mechvibes `config.json` and converts it into a native `manifest.toml`. This allows `clack use <mechvibes_folder>` to work. Use the keymap translation functions (`mechvibes_to_evdev`).
 2. **Packs Repo Scaffold (P1.5):** Scaffold `clack-packs/`. Download actual audio sources from GitHub (e.g., Mechvibes repo), write the `source.toml` configs, and write the Python/Rust `build.py` script that processes them into `packs-v1` format (OGG ~q3, mono, 48kHz, size optimized).
-3. **Gaming Keyboard Deduplication:** Some keyboards (e.g., gaming boards, QMK) expose multiple `/dev/input/event*` nodes (NKRO, macros). Currently, `clack-input/linux.rs` grabs all of them, resulting in double-sounds. **You must deduplicate by physical path (`phys`) or sysfs path.**
+3. **Gaming Keyboard Deduplication:** Done.
 4. **Pack Manager (P2.3):** Implement the `clack list` table, fetching the `index.json` catalog from GitHub, and the downloading/extraction logic for `clack pack add`.
+5. **Fixed Audio Silence:** The daemon was hanging in the input loop because `inotify` and `evdev` file descriptors were left in blocking mode, causing the event loop to stop processing keys until a hotplug event occurred. Fixed by using `fcntl` to set `O_NONBLOCK` on both fds.
 
 ---
 

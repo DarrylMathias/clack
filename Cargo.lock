@@ -327,6 +327,7 @@ dependencies = [
  "crossbeam-channel",
  "evdev",
  "inotify",
+ "libc",
  "serde",
  "thiserror 2.0.21",
  "tracing",
