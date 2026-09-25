@@ -11,6 +11,7 @@ pub enum Command {
     SetMuted { muted: bool },
     Use { pack: String },
     Volume { value: u8 },
+    AddPack { path: String },
     Reload,
     Shutdown,
 }

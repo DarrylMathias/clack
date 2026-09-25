@@ -204,8 +204,23 @@ impl Cli {
             }
 
             Some(Commands::Pack { action }) => {
-                println!("TODO: pack {action:?} — coming in P2.3");
-                Ok(())
+                match action {
+                    PackCommands::Add { source } => {
+                        let path = std::fs::canonicalize(&source)
+                            .map_err(|e| anyhow::anyhow!("File not found '{}': {}", source, e))?;
+                        let resp = send_ok(&Command::AddPack { path: path.to_string_lossy().into_owned() })?;
+                        if let Some(s) = resp.status {
+                            if let Some(pack) = s.active_pack {
+                                println!("Pack imported and active: {}", pack);
+                            }
+                        }
+                        Ok(())
+                    }
+                    PackCommands::Remove { id: _ } => {
+                        println!("TODO: pack remove — coming in P2.3");
+                        Ok(())
+                    }
+                }
             }
 
             Some(Commands::Setup { reset }) => {

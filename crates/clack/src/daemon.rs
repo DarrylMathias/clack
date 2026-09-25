@@ -343,6 +343,44 @@ fn handle_ipc(
                 Err(e) => Response::err(format!("failed to load pack: {e:#}")),
             }
         }
+        Command::AddPack { path } => {
+            let src = std::path::PathBuf::from(&path);
+            let name = src
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| "imported".to_string());
+            
+            // basic slugify for the dest folder
+            let slug = name.to_lowercase().chars().map(|c| if c.is_alphanumeric() { c } else { '-' }).collect::<String>().replace("--", "-").trim_matches('-').to_string();
+            let dest = pack_dir(&slug);
+            
+            match clack_core::mechvibes::import(&src, &dest, "unknown") {
+                Ok(manifest) => {
+                    // Try to load it
+                    match load_pack(&dest, device_rate) {
+                        Ok(bank) => {
+                            let _ = eng_tx.send(EngineMsg::SetBank(bank));
+                            *active_pack.lock().unwrap() = manifest.id.clone();
+                            if let Ok(mut cfg) = Config::load() {
+                                cfg.default_pack = manifest.id.clone();
+                                let _ = cfg.save();
+                            }
+                            let g = f32::from_bits(gain_bits.load(Ordering::Relaxed));
+                            let vol = (g.sqrt() * 100.0).round() as u8;
+                            Response::ok(Some(DaemonStatus {
+                                running: true,
+                                muted: muted.load(Ordering::Relaxed),
+                                active_pack: Some(manifest.id),
+                                volume: vol,
+                                keyboards_detected: vec![],
+                            }))
+                        }
+                        Err(e) => Response::err(format!("pack imported, but failed to load: {e:#}")),
+                    }
+                }
+                Err(e) => Response::err(format!("failed to import pack: {e:#}")),
+            }
+        }
         Command::Reload => {
             let _ = eng_tx.send(EngineMsg::Reload);
             Response::ok(None)
