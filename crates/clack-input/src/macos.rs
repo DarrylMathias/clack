@@ -34,6 +34,8 @@ use crate::InputBackend;
 // We call these via raw FFI so that the crate compiles on Linux CI.
 // On macOS the symbols are provided by the CoreGraphics and CoreFoundation frameworks.
 
+#![allow(non_upper_case_globals)]
+
 #[allow(non_camel_case_types)]
 mod ffi {
     use std::ffi::c_void;
