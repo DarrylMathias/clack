@@ -18,7 +18,7 @@ This document is extremely detailed to ensure the next agent understands exactly
 > **Order of work:**
 > 1. **M0.0 — fix CI first.** ✅ Done. Branch renamed, gh workflow triggered.
 > 2. **M0.1–M0.6:** hygiene, clippy, warnings, fmt, macOS compile check, CI binary artifacts. ✅ Done.
-> 3. **M1.1–M1.5:** input example, Mechvibes importer, local `pack add`, udev rule, first sound.
+> 3. **M1.1–M1.5:** input example, Mechvibes importer, local `pack add`, udev rule, first sound. ✅ Done.
 > 4. **M2 (all):** audio fixes, dedupe, key-code check, start at login, automated udev setup, single instance, pack manager.
 >
 > **Practical notes:**
@@ -123,3 +123,4 @@ The following tests are explicitly required by the implementation plan and have 
 | `6b319b2` | P1.3 Fix: stream recovery on device switch |
 | `206e1cb` | P2.1 Fix: daemon threaded audio wiring, sample picking, toggle tone |
 | `705731d` | M0.0-M0.6: Repo hygiene, rename branch, unignore md, fix clippy/fmt, build macOS/Linux binary artifacts |
+| `1c564f2` | M1.1-M1.5: Mechvibes importer, local pack add, first end-to-end sound run |
