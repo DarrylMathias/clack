@@ -20,9 +20,6 @@ Thumbs.db
 *.log
 *.log.*
 
-# Markdown files (implementation notes, progress docs, etc.)
-*.md
-**/*.md
 
 # Temp / scratch
 *.tmp
