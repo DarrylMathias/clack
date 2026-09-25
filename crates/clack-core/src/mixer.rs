@@ -118,10 +118,23 @@ impl Engine {
             supported.sample_rate().0,
         );
 
+        // §5.5: request a small buffer (~128 frames) for low latency; fall back to Default.
+        let buffer_size = match supported.buffer_size() {
+            cpal::SupportedBufferSize::Range { min, max } => {
+                let target = 128u32;
+                if target >= *min && target <= *max {
+                    BufferSize::Fixed(target)
+                } else {
+                    BufferSize::Fixed((*min).max(128).min(*max))
+                }
+            }
+            cpal::SupportedBufferSize::Unknown => BufferSize::Default,
+        };
+
         let config = StreamConfig {
             channels: supported.channels(),
             sample_rate: supported.sample_rate(),
-            buffer_size: BufferSize::Default,
+            buffer_size,
         };
 
         // SPSC ring: engine thread → audio callback.
