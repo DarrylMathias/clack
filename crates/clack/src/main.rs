@@ -7,6 +7,7 @@ use clap::Parser;
 
 mod cli;
 mod daemon;
+mod ipc_client;
 
 use cli::Cli;
 
