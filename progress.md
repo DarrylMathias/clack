@@ -15,8 +15,10 @@ This document is extremely detailed to ensure the next agent understands exactly
 > Dedupe is tested. Single instance socket is implemented.
 > 
 > **Next steps:**
-> - M2.11-M2.13: `clack list`, `clack pack add`, Catalog fetching.
-> - Handover to Darryl to test the service manually (DONE: verified working!).
+> - M2.11-M2.13: `clack list`, `clack pack add`, Catalog fetching. (DONE)
+> - Handover to Darryl to test the service manually (DONE: verified working in earphones tho!).
+> 
+> Next is Milestone M3: M3.1 Scaffold packs repo, M3.4 Onboarding TUI.
 
 ---
 
@@ -32,7 +34,7 @@ This document is extremely detailed to ensure the next agent understands exactly
 | **Phase 1** | P1.5 Packs repo | ⏳ Pending | Needs to be scaffolded as `clack-packs/` subdir. Requires fetching upstream audio files and building the native packs. |
 | **Phase 2** | P2.1 Daemon core | ✅ Done | Fixed: Engine thread correctly isolated (cpal streams aren't `Send`). IPC socket wired. Key presses actually trigger sound lookup (`SampleBank::pick_clip`) with random pitch/gain humanization. Synthesized toggle tone (P3.5) implemented. |
 | **Phase 2** | P2.2 CLI IPC commands | ✅ Done | All subcommands (`status`, `toggle`, `on`, `off`, `use`, `volume`, etc.) dispatch to the daemon socket. |
-| **Phase 2** | P2.3 Pack manager | ⏳ Pending | Catalog fetching, `clack list`, and pack installation logic. |
+| **Phase 2** | P2.3 Pack manager | ✅ Done | Catalog fetching, `clack list`, and `clack pack add` downloading logic. |
 | **Phase 3** | P3.1-3.4 System/Onboarding | ⏳ Pending | Service files, udev rules, TUI installer, release pipeline. |
 | **Phase 4** | P4.1-4.4 Maintenance/Tests | ⏳ Pending | `doctor`, `update`, documentation, missing tests (see section 4). |
 
@@ -58,7 +60,7 @@ Before moving to the Phase 3 (Install & Onboarding TUI), the following strictly 
 1. **Mechvibes Importer (P1.4 gap):** We need the code that reads a Mechvibes `config.json` and converts it into a native `manifest.toml`. This allows `clack use <mechvibes_folder>` to work. Use the keymap translation functions (`mechvibes_to_evdev`).
 2. **Packs Repo Scaffold (P1.5):** Scaffold `clack-packs/`. Download actual audio sources from GitHub (e.g., Mechvibes repo), write the `source.toml` configs, and write the Python/Rust `build.py` script that processes them into `packs-v1` format (OGG ~q3, mono, 48kHz, size optimized).
 3. **Gaming Keyboard Deduplication:** Done.
-4. **Pack Manager (P2.3):** Implement the `clack list` table, fetching the `index.json` catalog from GitHub, and the downloading/extraction logic for `clack pack add`.
+4. **Pack Manager (P2.3):** Done (`catalog.rs` fetching, `cli.rs` handling `add`/`remove`/`list`).
 5. **Fixed Audio Silence:** The daemon was hanging in the input loop because `inotify` and `evdev` file descriptors were left in blocking mode, causing the event loop to stop processing keys until a hotplug event occurred. Fixed by using `fcntl` to set `O_NONBLOCK` on both fds.
 
 ---

@@ -167,14 +167,94 @@ impl Cli {
             }
 
             Some(Commands::Use { pack }) => {
+                let p = clack_core::config::packs_dir().join(&pack);
+                if !p.exists() {
+                    // Try auto-install
+                    if let Ok(cat) = clack_core::catalog::fetch_catalog() {
+                        if let Some(entry) = cat.packs.iter().find(|e| e.id == *pack) {
+                            clack_core::catalog::install_pack(entry)?;
+                        }
+                    }
+                }
                 send_ok(&Command::Use { pack: pack.clone() })?;
                 println!("switched to {pack}");
                 Ok(())
             }
 
             Some(Commands::List) => {
-                // TODO (P2.3): fetch catalog and render the full list.
-                println!("(pack list not yet implemented — coming in P2.3)");
+                // Determine active pack
+                let active_pack = match crate::ipc_client::send(&clack_core::ipc::Command::Status) {
+                    Ok(resp) => {
+                        resp.status.and_then(|s| s.active_pack)
+                            .unwrap_or_else(|| clack_core::config::Config::load().unwrap_or_default().default_pack)
+                    }
+                    Err(_) => clack_core::config::Config::load().unwrap_or_default().default_pack,
+                };
+
+                // Find local packs
+                let mut local_packs = std::collections::HashMap::new();
+                if let Ok(entries) = std::fs::read_dir(clack_core::config::packs_dir()) {
+                    for entry in entries.flatten() {
+                        let path = entry.path();
+                        if path.is_dir() {
+                            if let Ok(manifest) = clack_core::pack::Manifest::load(&path) {
+                                local_packs.insert(manifest.id.clone(), manifest);
+                            }
+                        }
+                    }
+                }
+
+                // Fetch catalog
+                let catalog_entries = clack_core::catalog::fetch_catalog()
+                    .map(|c| c.packs)
+                    .unwrap_or_default();
+
+                // Build a combined list
+                let mut all_ids = std::collections::HashSet::new();
+                for id in local_packs.keys() {
+                    all_ids.insert(id.clone());
+                }
+                for entry in &catalog_entries {
+                    all_ids.insert(entry.id.clone());
+                }
+                
+                let mut sorted_ids: Vec<_> = all_ids.into_iter().collect();
+                sorted_ids.sort();
+
+                println!("{:-<50}", "");
+                println!("{:<2} {:<25} {:<15} {}", "", "ID", "FAMILY", "LICENSE");
+                println!("{:-<50}", "");
+
+                for id in sorted_ids {
+                    let is_active = id == active_pack;
+                    let is_installed = local_packs.contains_key(&id);
+                    
+                    let marker = if is_active {
+                        "●"
+                    } else if is_installed {
+                        "○"
+                    } else {
+                        " "
+                    };
+
+                    let (name, family, license, is_local_only) = if let Some(cat) = catalog_entries.iter().find(|c| c.id == id) {
+                        (cat.name.to_string(), cat.family.to_string(), cat.license.to_string(), false)
+                    } else if let Some(loc) = local_packs.get(&id) {
+                        (loc.name.to_string(), loc.family.to_string(), loc.license.to_string(), true)
+                    } else {
+                        continue;
+                    };
+
+                    let lic_str = if is_local_only {
+                        "local"
+                    } else if license == "MIT" || license == "CC0-1.0" {
+                        ""
+                    } else {
+                        &license
+                    };
+
+                    println!("{marker}  {:<25} {:<15} {}", id, family, lic_str);
+                }
                 Ok(())
             }
 
@@ -196,9 +276,21 @@ impl Cli {
             Some(Commands::Pack { action }) => {
                 match action {
                     PackCommands::Add { source } => {
-                        let path = std::fs::canonicalize(&source)
-                            .map_err(|e| anyhow::anyhow!("File not found '{}': {}", source, e))?;
-                        let resp = send_ok(&Command::AddPack { path: path.to_string_lossy().into_owned() })?;
+                        let is_url_or_id = source.starts_with("http") || !source.contains(std::path::MAIN_SEPARATOR);
+                        
+                        let path_to_add = if is_url_or_id {
+                            // Find in catalog
+                            let cat = clack_core::catalog::fetch_catalog()?;
+                            let entry = cat.packs.iter().find(|p| p.id == source || p.url == source)
+                                .ok_or_else(|| anyhow::anyhow!("Pack '{}' not found in catalog", source))?;
+                            clack_core::catalog::install_pack(entry)?;
+                            clack_core::config::packs_dir().join(&entry.id)
+                        } else {
+                            std::fs::canonicalize(&source)
+                                .map_err(|e| anyhow::anyhow!("File not found '{}': {}", source, e))?
+                        };
+
+                        let resp = send_ok(&Command::AddPack { path: path_to_add.to_string_lossy().into_owned() })?;
                         if let Some(s) = resp.status {
                             if let Some(pack) = s.active_pack {
                                 println!("Pack imported and active: {}", pack);
@@ -206,8 +298,20 @@ impl Cli {
                         }
                         Ok(())
                     }
-                    PackCommands::Remove { id: _ } => {
-                        println!("TODO: pack remove — coming in P2.3");
+                    PackCommands::Remove { id } => {
+                        let active_pack = match crate::ipc_client::send(&clack_core::ipc::Command::Status) {
+                            Ok(resp) => resp.status.and_then(|s| s.active_pack).unwrap_or_default(),
+                            Err(_) => String::new(),
+                        };
+                        if active_pack == *id {
+                            anyhow::bail!("Cannot remove active pack. Switch to another pack first.");
+                        }
+                        let p = clack_core::config::packs_dir().join(&id);
+                        if !p.exists() {
+                            anyhow::bail!("Pack '{}' is not installed locally", id);
+                        }
+                        std::fs::remove_dir_all(&p)?;
+                        println!("Removed pack '{}'", id);
                         Ok(())
                     }
                 }

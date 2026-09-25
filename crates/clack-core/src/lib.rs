@@ -9,3 +9,4 @@ pub mod mixer;
 pub mod pack;
 pub mod toggle;
 pub mod types;
+pub mod catalog;

@@ -306,14 +306,18 @@ dependencies = [
  "crossbeam-channel",
  "dirs",
  "fastrand",
+ "flate2",
  "rtrb",
  "serde",
  "serde_json",
+ "sha2",
  "symphonia",
+ "tar",
  "tempfile",
  "thiserror 2.0.21",
  "toml",
  "tracing",
+ "ureq",
 ]
 
 [[package]]
@@ -2352,6 +2356,8 @@ dependencies = [
  "once_cell",
  "rustls",
  "rustls-pki-types",
+ "serde",
+ "serde_json",
  "url",
  "webpki-roots 0.26.11",
 ]
