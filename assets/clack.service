@@ -1,0 +1,13 @@
+# systemd user unit for clack (§5.7).
+# Install at ~/.config/systemd/user/clack.service
+[Unit]
+Description=clack — mechanical keyboard sounds
+After=sound.target
+
+[Service]
+ExecStart=%h/.local/bin/clack daemon
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

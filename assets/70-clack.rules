@@ -1,0 +1,4 @@
+# udev rule: grant the logged-in user read access to keyboard event nodes (§5.8).
+# This must be installed at /etc/udev/rules.d/70-clack.rules (number < 73 so that
+# 73-seat-late.rules can apply the uaccess tag).
+SUBSYSTEM=="input", KERNEL=="event*", ENV{ID_INPUT_KEYBOARD}=="1", TAG+="uaccess"
