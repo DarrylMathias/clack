@@ -3,6 +3,7 @@
 pub mod config;
 pub mod ipc;
 pub mod keymap;
+pub mod mixer;
 pub mod pack;
 pub mod toggle;
 pub mod types;
