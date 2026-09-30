@@ -22,7 +22,7 @@ use anyhow::{Context, Result};
 use crossbeam_channel::Sender;
 use evdev::{Device, InputEventKind, Key};
 use inotify::{Inotify, WatchMask};
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 
 use clack_core::types::{AccessError, DeviceInfo, KeyCode, KeyEvent, KeyState};
 
@@ -59,7 +59,7 @@ fn run_loop(tx: Sender<KeyEvent>, stop: Arc<AtomicBool>) -> Result<()> {
     if devices.is_empty() {
         warn!("no keyboard devices could be opened; waiting for hotplug");
     } else {
-        info!("opened {} keyboard device(s)", devices.len());
+        debug!("opened {} keyboard device(s)", devices.len());
     }
 
     // Set up inotify to watch /dev/input for hotplug events.
@@ -111,8 +111,7 @@ fn run_loop(tx: Sender<KeyEvent>, stop: Arc<AtomicBool>) -> Result<()> {
                             if !dedupe.filter(&dev_phys, &event) {
                                 continue;
                             }
-                            
-                            info!("Input thread parsed key event: {:?}", event);
+
                             if tx.send(event).is_err() {
                                 return Ok(());
                             }
@@ -120,14 +119,14 @@ fn run_loop(tx: Sender<KeyEvent>, stop: Arc<AtomicBool>) -> Result<()> {
                     }
                 }
                 Err(e) if e.raw_os_error() == Some(LIBC_ENODEV) => {
-                    info!("device {} disconnected", path.display());
+                    debug!("device {} disconnected", path.display());
                     to_remove.push(path.clone());
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                     // non-blocking
                 }
                 Err(e) => {
-                    info!("read error on {}: {e}", path.display());
+                    warn!("read error on {}: {e}", path.display());
                     to_remove.push(path.clone());
                 }
             }
@@ -145,7 +144,7 @@ fn run_loop(tx: Sender<KeyEvent>, stop: Arc<AtomicBool>) -> Result<()> {
                         if is_event_node(&path) && !devices.contains_key(&path) {
                             match open_device(&path) {
                                 Ok(dev) => {
-                                    info!("hotplug: opened {}", path.display());
+                                    debug!("hotplug: opened {}", path.display());
                                     devices.insert(path, dev);
                                 }
                                 Err(e) => debug!("hotplug: skipping {}: {e}", path.display()),
@@ -162,7 +161,7 @@ fn run_loop(tx: Sender<KeyEvent>, stop: Arc<AtomicBool>) -> Result<()> {
         std::thread::sleep(std::time::Duration::from_millis(1));
     }
 
-    info!("Linux input backend stopped");
+    debug!("Linux input backend stopped");
     Ok(())
 }
 
@@ -213,37 +212,6 @@ impl DedupeFilter {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_dedupe_filter() {
-        let mut filter = DedupeFilter::new();
-        let ev = KeyEvent {
-            code: 30,
-            state: KeyState::Down,
-            at: Instant::now(),
-        };
-
-        // First down from keyboard 1 should pass.
-        assert!(filter.filter("usb-0000:00:14.0-2.4/input0", &ev));
-        
-        // Second down from keyboard 2 (same phys root) within 5ms should be filtered.
-        assert!(!filter.filter("usb-0000:00:14.0-2.4/input1", &ev));
-        
-        // Down from entirely different keyboard should pass.
-        assert!(filter.filter("usb-0000:00:14.0-3/input0", &ev));
-        
-        // Up events should always pass.
-        let up_ev = KeyEvent {
-            code: 30,
-            state: KeyState::Up,
-            at: Instant::now(),
-        };
-        assert!(filter.filter("usb-0000:00:14.0-2.4/input1", &up_ev));
-    }
-}
 
 // ── Device helpers ────────────────────────────────────────────────────────────
 
@@ -346,6 +314,37 @@ fn key_to_evdev_code(key: Key) -> KeyCode {
     // evdev::Key is a newtype over u16; use the raw value directly.
     key.code()
 }
-
 // ENODEV = 19 on Linux
 const LIBC_ENODEV: i32 = 19;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_dedupe_filter() {
+        let mut filter = DedupeFilter::new();
+        let ev = KeyEvent {
+            code: 30,
+            state: KeyState::Down,
+            at: Instant::now(),
+        };
+
+        // First down from keyboard 1 should pass.
+        assert!(filter.filter("usb-0000:00:14.0-2.4/input0", &ev));
+        
+        // Second down from keyboard 2 (same phys root) within 5ms should be filtered.
+        assert!(!filter.filter("usb-0000:00:14.0-2.4/input1", &ev));
+        
+        // Down from entirely different keyboard should pass.
+        assert!(filter.filter("usb-0000:00:14.0-3/input0", &ev));
+        
+        // Up events should always pass.
+        let up_ev = KeyEvent {
+            code: 30,
+            state: KeyState::Up,
+            at: Instant::now(),
+        };
+        assert!(filter.filter("usb-0000:00:14.0-2.4/input1", &up_ev));
+    }
+}

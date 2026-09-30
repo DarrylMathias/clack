@@ -184,11 +184,16 @@ impl Cli {
             Some(Commands::List) => {
                 // Determine active pack
                 let active_pack = match crate::ipc_client::send(&clack_core::ipc::Command::Status) {
-                    Ok(resp) => {
-                        resp.status.and_then(|s| s.active_pack)
-                            .unwrap_or_else(|| clack_core::config::Config::load().unwrap_or_default().default_pack)
+                    Ok(resp) => resp.status.and_then(|s| s.active_pack).unwrap_or_else(|| {
+                        clack_core::config::Config::load()
+                            .unwrap_or_default()
+                            .default_pack
+                    }),
+                    Err(_) => {
+                        clack_core::config::Config::load()
+                            .unwrap_or_default()
+                            .default_pack
                     }
-                    Err(_) => clack_core::config::Config::load().unwrap_or_default().default_pack,
                 };
 
                 // Find local packs
@@ -217,18 +222,18 @@ impl Cli {
                 for entry in &catalog_entries {
                     all_ids.insert(entry.id.clone());
                 }
-                
+
                 let mut sorted_ids: Vec<_> = all_ids.into_iter().collect();
                 sorted_ids.sort();
 
                 println!("{:-<50}", "");
-                println!("{:<2} {:<25} {:<15} {}", "", "ID", "FAMILY", "LICENSE");
+                println!("{:<2} {:<25} {:<15} LICENSE", "", "ID", "FAMILY");
                 println!("{:-<50}", "");
 
                 for id in sorted_ids {
                     let is_active = id == active_pack;
                     let is_installed = local_packs.contains_key(&id);
-                    
+
                     let marker = if is_active {
                         "●"
                     } else if is_installed {
@@ -237,13 +242,24 @@ impl Cli {
                         " "
                     };
 
-                    let (name, family, license, is_local_only) = if let Some(cat) = catalog_entries.iter().find(|c| c.id == id) {
-                        (cat.name.to_string(), cat.family.to_string(), cat.license.to_string(), false)
-                    } else if let Some(loc) = local_packs.get(&id) {
-                        (loc.name.to_string(), loc.family.to_string(), loc.license.to_string(), true)
-                    } else {
-                        continue;
-                    };
+                    let (_name, family, license, is_local_only) =
+                        if let Some(cat) = catalog_entries.iter().find(|c| c.id == id) {
+                            (
+                                cat.name.to_string(),
+                                cat.family.to_string(),
+                                cat.license.to_string(),
+                                false,
+                            )
+                        } else if let Some(loc) = local_packs.get(&id) {
+                            (
+                                loc.name.to_string(),
+                                loc.family.to_string(),
+                                loc.license.to_string(),
+                                true,
+                            )
+                        } else {
+                            continue;
+                        };
 
                     let lic_str = if is_local_only {
                         "local"
@@ -276,21 +292,30 @@ impl Cli {
             Some(Commands::Pack { action }) => {
                 match action {
                     PackCommands::Add { source } => {
-                        let is_url_or_id = source.starts_with("http") || !source.contains(std::path::MAIN_SEPARATOR);
-                        
+                        let is_url_or_id = source.starts_with("http")
+                            || !source.contains(std::path::MAIN_SEPARATOR);
+
                         let path_to_add = if is_url_or_id {
                             // Find in catalog
                             let cat = clack_core::catalog::fetch_catalog()?;
-                            let entry = cat.packs.iter().find(|p| p.id == source || p.url == source)
-                                .ok_or_else(|| anyhow::anyhow!("Pack '{}' not found in catalog", source))?;
+                            let entry = cat
+                                .packs
+                                .iter()
+                                .find(|p| p.id == source || p.url == source)
+                                .ok_or_else(|| {
+                                    anyhow::anyhow!("Pack '{}' not found in catalog", source)
+                                })?;
                             clack_core::catalog::install_pack(entry)?;
                             clack_core::config::packs_dir().join(&entry.id)
                         } else {
-                            std::fs::canonicalize(&source)
-                                .map_err(|e| anyhow::anyhow!("File not found '{}': {}", source, e))?
+                            std::fs::canonicalize(&source).map_err(|e| {
+                                anyhow::anyhow!("File not found '{}': {}", source, e)
+                            })?
                         };
 
-                        let resp = send_ok(&Command::AddPack { path: path_to_add.to_string_lossy().into_owned() })?;
+                        let resp = send_ok(&Command::AddPack {
+                            path: path_to_add.to_string_lossy().into_owned(),
+                        })?;
                         if let Some(s) = resp.status {
                             if let Some(pack) = s.active_pack {
                                 println!("Pack imported and active: {}", pack);
@@ -299,12 +324,17 @@ impl Cli {
                         Ok(())
                     }
                     PackCommands::Remove { id } => {
-                        let active_pack = match crate::ipc_client::send(&clack_core::ipc::Command::Status) {
-                            Ok(resp) => resp.status.and_then(|s| s.active_pack).unwrap_or_default(),
-                            Err(_) => String::new(),
-                        };
+                        let active_pack =
+                            match crate::ipc_client::send(&clack_core::ipc::Command::Status) {
+                                Ok(resp) => {
+                                    resp.status.and_then(|s| s.active_pack).unwrap_or_default()
+                                }
+                                Err(_) => String::new(),
+                            };
                         if active_pack == *id {
-                            anyhow::bail!("Cannot remove active pack. Switch to another pack first.");
+                            anyhow::bail!(
+                                "Cannot remove active pack. Switch to another pack first."
+                            );
                         }
                         let p = clack_core::config::packs_dir().join(&id);
                         if !p.exists() {
@@ -317,7 +347,10 @@ impl Cli {
                 }
             }
 
-            Some(Commands::Setup { reset, permissions_only }) => {
+            Some(Commands::Setup {
+                reset,
+                permissions_only,
+            }) => {
                 if permissions_only {
                     crate::perms::setup_permissions()?;
                 } else {

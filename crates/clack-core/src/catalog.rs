@@ -8,7 +8,8 @@ use tracing::{debug, warn};
 
 use crate::config::data_dir;
 
-const INDEX_URL: &str = "https://github.com/DarrylMathias/clack-packs/releases/latest/download/index.json";
+const INDEX_URL: &str =
+    "https://github.com/DarrylMathias/clack-packs/releases/latest/download/index.json";
 const CACHE_TTL: Duration = Duration::from_secs(24 * 60 * 60); // 24 hours
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -53,7 +54,7 @@ pub fn fetch_catalog() -> Result<Catalog> {
     if needs_fetch {
         let url = std::env::var("CLACK_INDEX_URL").unwrap_or_else(|_| INDEX_URL.to_string());
         debug!("fetching catalog from {url}");
-        
+
         match ureq::get(&url).call() {
             Ok(resp) => {
                 let text = resp.into_string().context("reading catalog response")?;
@@ -86,10 +87,10 @@ pub fn fetch_catalog() -> Result<Catalog> {
 }
 
 pub fn install_pack(entry: &CatalogEntry) -> Result<()> {
-    use std::io::Read;
     use flate2::read::GzDecoder;
-    use sha2::{Sha256, Digest};
-    
+    use sha2::{Digest, Sha256};
+    use std::io::Read;
+
     let dest_dir = crate::config::packs_dir().join(&entry.id);
     if dest_dir.exists() {
         return Ok(());
@@ -98,25 +99,25 @@ pub fn install_pack(entry: &CatalogEntry) -> Result<()> {
     println!("Downloading {}...", entry.id);
     let resp = ureq::get(&entry.url).call().context("downloading pack")?;
     let mut reader = resp.into_reader();
-    
+
     let mut bytes = Vec::new();
     reader.read_to_end(&mut bytes)?;
-    
+
     let hash = format!("{:x}", Sha256::digest(&bytes));
     if hash != entry.sha256 {
         anyhow::bail!("sha256 mismatch for {}", entry.id);
     }
-    
+
     let temp_dir = std::env::temp_dir().join(format!("clack-pack-{}", entry.id));
     if temp_dir.exists() {
         fs::remove_dir_all(&temp_dir)?;
     }
-    
+
     let tar = GzDecoder::new(std::io::Cursor::new(bytes));
     let mut archive = tar::Archive::new(tar);
     archive.unpack(&temp_dir).context("unpacking pack")?;
-    
+
     fs::rename(&temp_dir, &dest_dir).context("moving pack to final destination")?;
-    
+
     Ok(())
 }

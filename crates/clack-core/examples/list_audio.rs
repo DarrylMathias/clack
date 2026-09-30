@@ -5,7 +5,10 @@ fn main() {
     println!("Host: {:?}", host.id());
 
     let default = host.default_output_device();
-    println!("Default output: {:?}", default.map(|d| d.name().unwrap_or("unknown".to_string())));
+    println!(
+        "Default output: {:?}",
+        default.map(|d| d.name().unwrap_or("unknown".to_string()))
+    );
 
     println!("All output devices:");
     if let Ok(devices) = host.output_devices() {

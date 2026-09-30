@@ -1,19 +1,19 @@
-use std::process::Command;
 use anyhow::{Context, Result};
+use std::process::Command;
 
 #[cfg(target_os = "linux")]
 pub fn setup_permissions() -> Result<()> {
     // Check if running NixOS.
     if std::path::Path::new("/etc/NIXOS").exists() || std::path::Path::new("/etc/nixos").exists() {
         println!("You are running NixOS. Please add the following to your configuration.nix:");
-        println!("  services.udev.extraRules = \"KERNEL==\\\"event*\\\", SUBSYSTEM==\\\"input\\\", TAG+=\\\"uaccess\\\"\";");
+        println!("  services.udev.extraRules = \"KERNEL==\\\"event*\\\", SUBSYSTEM==\\\"input\\\", TAG+=\\\"uaccess\\\"\";"); // privacy-ok: udev device glob, no key data
         println!("Then run `nixos-rebuild switch` and reboot.");
         return Ok(());
     }
 
     // Check if systemd-logind is running.
     let has_logind = Command::new("systemctl")
-        .args(&["is-active", "systemd-logind"])
+        .args(["is-active", "systemd-logind"])
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false);
@@ -41,17 +41,15 @@ pub fn setup_permissions() -> Result<()> {
     }
 
     Command::new("sudo")
-        .args(&["udevadm", "control", "--reload-rules"])
+        .args(["udevadm", "control", "--reload-rules"])
         .status()?;
-    Command::new("sudo")
-        .args(&["udevadm", "trigger"])
-        .status()?;
+    Command::new("sudo").args(["udevadm", "trigger"]).status()?;
 
     if !has_logind {
         let user = std::env::var("USER").context("USER not set")?;
         println!("Systemd-logind not detected. Adding you to the 'input' group.");
         Command::new("sudo")
-            .args(&["usermod", "-aG", "input", &user])
+            .args(["usermod", "-aG", "input", &user])
             .status()?;
         println!("IMPORTANT: You must log out and log back in for group changes to take effect.");
     } else {

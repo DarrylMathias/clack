@@ -31,14 +31,15 @@ pub fn import(src: &Path, dest: &Path, license: &str) -> Result<Manifest> {
     let config_path = src.join("config.json");
     let config_str = fs::read_to_string(&config_path)
         .with_context(|| format!("reading {}", config_path.display()))?;
-    
+
     let config: MechvibesConfig = serde_json::from_str(&config_str)
         .with_context(|| format!("parsing config.json in {}", src.display()))?;
 
     // Create dest dir if not exists
     fs::create_dir_all(dest).context("creating destination directory")?;
 
-    let id = src.file_name()
+    let id = src
+        .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .map(|s| slugify(&s))
         .unwrap_or_else(|| slugify(&config.name));
@@ -62,8 +63,7 @@ pub fn import(src: &Path, dest: &Path, license: &str) -> Result<Manifest> {
             let src_audio = src.join(sound);
             let dest_audio = dest.join(sound);
             if src_audio.exists() {
-                fs::copy(&src_audio, &dest_audio)
-                    .with_context(|| format!("copying {}", sound))?;
+                fs::copy(&src_audio, &dest_audio).with_context(|| format!("copying {}", sound))?;
             } else {
                 warn!("Sprite audio {} missing in source", sound);
             }
@@ -71,7 +71,7 @@ pub fn import(src: &Path, dest: &Path, license: &str) -> Result<Manifest> {
     }
 
     let mut unknown_codes = 0;
-    
+
     for (vc_str, val) in &config.defines {
         let vc = match vc_str.parse::<u32>() {
             Ok(v) => v,
@@ -129,7 +129,10 @@ pub fn import(src: &Path, dest: &Path, license: &str) -> Result<Manifest> {
     }
 
     if unknown_codes > 0 {
-        warn!("Skipped {} unknown Mechvibes keycodes during import.", unknown_codes);
+        warn!(
+            "Skipped {} unknown Mechvibes keycodes during import.",
+            unknown_codes
+        );
     }
 
     // Default: take up to 5 clips from the alphanumeric keys
@@ -162,11 +165,14 @@ pub fn import(src: &Path, dest: &Path, license: &str) -> Result<Manifest> {
     }
 
     let manifest_path = dest.join("manifest.toml");
-    let toml_str = toml::to_string_pretty(&manifest)
-        .context("serializing manifest to TOML")?;
+    let toml_str = toml::to_string_pretty(&manifest).context("serializing manifest to TOML")?;
     fs::write(&manifest_path, toml_str).context("writing manifest.toml")?;
 
-    info!("Imported Mechvibes pack '{}' into {}", manifest.name, dest.display());
+    info!(
+        "Imported Mechvibes pack '{}' into {}",
+        manifest.name,
+        dest.display()
+    );
 
     Ok(manifest)
 }
@@ -206,7 +212,7 @@ mod tests {
                 }
             }
         }
-        
+
         println!("Imported {} packs successfully, {} failed", success, failed);
         assert_eq!(failed, 0, "All packs should import successfully");
         assert!(success > 0, "No packs were found to import");

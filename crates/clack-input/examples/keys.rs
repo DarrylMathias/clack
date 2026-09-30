@@ -1,7 +1,7 @@
-use clack_input::{DefaultBackend, InputBackend};
 use clack_core::types::KeyState;
-use std::sync::{atomic::AtomicBool, Arc};
+use clack_input::{DefaultBackend, InputBackend};
 use crossbeam_channel::unbounded;
+use std::sync::{atomic::AtomicBool, Arc};
 use std::thread;
 
 fn main() {
@@ -23,7 +23,7 @@ fn main() {
 
     let mut backend = DefaultBackend;
     let stop_for_backend = stop.clone();
-    
+
     // Run the backend in a separate thread
     let _handle = thread::spawn(move || {
         if let Err(e) = backend.run(tx, stop_for_backend) {
@@ -32,7 +32,7 @@ fn main() {
     });
 
     println!("Listening for key events... Press Ctrl-C to stop.");
-    
+
     // Print events as they arrive
     while let Ok(event) = rx.recv() {
         let state_str = match event.state {

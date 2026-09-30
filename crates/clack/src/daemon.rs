@@ -5,6 +5,12 @@
 //!
 //! The Engine (cpal stream) lives on the engine thread — cpal streams are not Send.
 //! IPC commands are passed to the engine thread via a secondary crossbeam channel.
+//!
+//! Idle stream (§change-3):
+//!   The cpal stream is opened on the first keypress after silence and closed
+//!   `idle_timeout_secs` after the last keypress.  While idle, clack holds no
+//!   PipeWire node, so the graph quantum reverts to the system default and
+//!   Bluetooth A2DP sinks are unaffected.
 
 use std::{
     os::unix::net::UnixListener,
@@ -13,7 +19,7 @@ use std::{
         Arc, Mutex,
     },
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use anyhow::{Context, Result};
@@ -23,7 +29,7 @@ use clack_core::{
     config::{log_path, socket_path, Config, State},
     decoder::load_pack,
     ipc::{Command, DaemonStatus, Response},
-    mixer::{perceptual_gain, Engine, SampleBank},
+    mixer::{perceptual_gain, Engine, SampleBank, TARGET_RATE},
     pack::pack_dir,
     toggle::ToggleDetector,
     types::{KeyEvent, KeyState},
@@ -49,21 +55,38 @@ pub fn run() -> Result<()> {
         std::fs::create_dir_all(dir)?;
     }
 
-    let file_appender = tracing_appender::rolling::never(
-        log_dir.parent().unwrap(),
-        log_dir.file_name().unwrap(),
-    );
+    let file_appender = tracing_appender::rolling::daily(log_dir.parent().unwrap(), "clack.log");
     let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
-    
+
     tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env().add_directive(tracing::Level::INFO.into()))
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::from_default_env()
+                .add_directive(tracing::Level::WARN.into()),
+        )
         .with_writer(non_blocking)
         .init();
 
     let config = Config::load().context("loading config")?;
     let state = State::load().unwrap_or_default();
 
-    info!("clack daemon starting — pack: {}", config.default_pack);
+    // Resolve speaker sink: config takes precedence over the env var, which
+    // takes precedence over the hard-coded default.
+    let speaker_sink = if !config.speaker_sink.is_empty() {
+        config.speaker_sink.clone()
+    } else {
+        std::env::var("PIPEWIRE_NODE").unwrap_or_default()
+    };
+
+    let idle_timeout = if config.idle_timeout_secs == 0 {
+        None // keep stream permanently open
+    } else {
+        Some(Duration::from_secs(config.idle_timeout_secs))
+    };
+
+    info!(
+        "clack daemon starting — pack: {}, sink: {}",
+        config.default_pack, speaker_sink
+    );
 
     install_signal_handler();
 
@@ -112,7 +135,7 @@ pub fn run() -> Result<()> {
 
     // ── Engine thread ─────────────────────────────────────────────────────────
     // Owns the cpal Engine (not Send); runs the toggle detector; dispatches PlayCmd.
-    let device_rate_shared = Arc::new(AtomicU32::new(0));
+    let device_rate_shared = Arc::new(AtomicU32::new(TARGET_RATE));
     let device_rate_for_eng = device_rate_shared.clone();
 
     let toggle_binding = config.toggle.clone();
@@ -125,26 +148,20 @@ pub fn run() -> Result<()> {
     thread::Builder::new()
         .name("clack-engine".into())
         .spawn(move || {
-            // Start audio engine on this thread.
-            let mut engine = match Engine::start() {
-                Ok(e) => e,
-                Err(e) => {
-                    error!("audio engine failed: {e:#}");
-                    return;
-                }
-            };
+            // Build the engine handle (stream is not yet open).
+            let mut engine = Engine::new(speaker_sink.clone());
 
-            let device_rate = engine.sample_rate;
+            let device_rate = TARGET_RATE;
             device_rate_for_eng.store(device_rate, Ordering::Relaxed);
 
-            // Set initial gain.
+            // Set initial gain (buffered — applied when stream opens).
             let init_gain = perceptual_gain(config.volume);
             engine.set_master_gain(init_gain);
             let mut current_gain = init_gain;
 
-            info!("audio engine: {} Hz, {} ch", device_rate, engine.channels);
+            info!("audio engine ready (stream will open on first keypress)");
 
-            // Load initial pack.
+            // Load initial pack at TARGET_RATE so no resampling happens at play time.
             let pdir = pack_dir(&default_pack_name);
             let mut bank = if pdir.exists() {
                 match load_pack(&pdir, device_rate) {
@@ -165,8 +182,21 @@ pub fn run() -> Result<()> {
             let mut rng = fastrand::Rng::new();
             let mut detector = ToggleDetector::default();
 
+            // Idle timeout tracking.
+            let mut last_key_time: Option<Instant> = None;
+
             loop {
                 engine.gc();
+
+                // ── Idle timeout: close stream if inactive long enough ─────
+                if let (Some(timeout), Some(last)) = (idle_timeout, last_key_time) {
+                    if engine.is_open() && last.elapsed() >= timeout {
+                        engine.close();
+                        last_key_time = None;
+                        info!("stream closed after idle timeout");
+                    }
+                }
+
                 // Check for engine-thread messages (non-blocking).
                 while let Ok(msg) = eng_rx.try_recv() {
                     match msg {
@@ -179,9 +209,8 @@ pub fn run() -> Result<()> {
                             // Reload config and pack inside the engine thread.
                             if let Ok(cfg) = Config::load() {
                                 let pdir = pack_dir(&cfg.default_pack);
-                                if let Ok(new_bank) =
-                                    load_pack(&pdir, device_rate_for_eng.load(Ordering::Relaxed))
-                                {
+                                let rate = device_rate_for_eng.load(Ordering::Relaxed);
+                                if let Ok(new_bank) = load_pack(&pdir, rate) {
                                     bank = new_bank;
                                     info!("reloaded pack '{}'", cfg.default_pack);
                                 }
@@ -194,18 +223,15 @@ pub fn run() -> Result<()> {
                     }
                 }
 
-                // Stream recovery.
-                if engine.stream_error.load(Ordering::Relaxed) {
+                // Stream error recovery.
+                if engine.check_error() {
                     if let Err(e) = engine.restart(current_gain) {
                         error!("stream restart failed: {e:#}");
                     }
                 }
 
                 let event = match key_rx.recv_timeout(Duration::from_millis(20)) {
-                    Ok(ev) => {
-                        info!("Engine received key event: {:?}", ev);
-                        ev
-                    },
+                    Ok(ev) => ev,
                     Err(crossbeam_channel::RecvTimeoutError::Timeout) => continue,
                     Err(crossbeam_channel::RecvTimeoutError::Disconnected) => break,
                 };
@@ -217,6 +243,9 @@ pub fn run() -> Result<()> {
                     info!("toggle: {}", if now_muted { "muted" } else { "unmuted" });
                     play_tone(&mut engine, !now_muted);
                     let _ = State { muted: now_muted }.save();
+                    if !now_muted {
+                        last_key_time = Some(Instant::now());
+                    }
                     continue;
                 }
 
@@ -230,7 +259,6 @@ pub fn run() -> Result<()> {
                 }
 
                 if let Some(clip) = bank.pick_clip(event.code, is_release, &mut rng) {
-                    info!("Picked clip for key {}", event.code);
                     let samples = clip.samples.clone();
                     let channels = clip.channels;
                     let (rate, gain) = if humanize {
@@ -241,12 +269,10 @@ pub fn run() -> Result<()> {
                         (1.0f32, 1.0f32)
                     };
                     engine.play(samples, channels, rate, gain);
-                } else {
-                    info!("No clip found for key {} (release: {})", event.code, is_release);
+                    last_key_time = Some(Instant::now());
                 }
             }
         })?;
-
 
     // Wait briefly for engine to report its sample rate.
     let device_rate = {
@@ -377,11 +403,18 @@ fn handle_ipc(
                 .file_name()
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_else(|| "imported".to_string());
-            
+
             // basic slugify for the dest folder
-            let slug = name.to_lowercase().chars().map(|c| if c.is_alphanumeric() { c } else { '-' }).collect::<String>().replace("--", "-").trim_matches('-').to_string();
+            let slug = name
+                .to_lowercase()
+                .chars()
+                .map(|c| if c.is_alphanumeric() { c } else { '-' })
+                .collect::<String>()
+                .replace("--", "-")
+                .trim_matches('-')
+                .to_string();
             let dest = pack_dir(&slug);
-            
+
             match clack_core::mechvibes::import(&src, &dest, "unknown") {
                 Ok(manifest) => {
                     // Try to load it
@@ -403,7 +436,9 @@ fn handle_ipc(
                                 keyboards_detected: vec![],
                             }))
                         }
-                        Err(e) => Response::err(format!("pack imported, but failed to load: {e:#}")),
+                        Err(e) => {
+                            Response::err(format!("pack imported, but failed to load: {e:#}"))
+                        }
                     }
                 }
                 Err(e) => Response::err(format!("failed to import pack: {e:#}")),

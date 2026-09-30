@@ -36,6 +36,15 @@ pub struct Config {
     pub toggle: ToggleBinding,
     pub release_sounds: bool,
     pub humanize: bool,
+    /// PipeWire node.name of the built-in speaker sink.
+    /// Clack will ONLY output here; it never follows the default sink.
+    /// If empty, the PIPEWIRE_NODE env var (or service Environment=) is used.
+    /// If the sink does not exist, clack logs a warning and stays idle.
+    pub speaker_sink: String,
+    /// Seconds of silence after which the audio stream is closed.
+    /// The stream reopens automatically on the next keypress.
+    /// Set to 0 to keep the stream permanently open.
+    pub idle_timeout_secs: u64,
 }
 
 impl Default for Config {
@@ -46,6 +55,10 @@ impl Default for Config {
             toggle: ToggleBinding::DoubleCtrl,
             release_sounds: true,
             humanize: true,
+            speaker_sink:
+                "alsa_output.pci-0000_00_1f.3-platform-skl_hda_dsp_generic.HiFi__Speaker__sink"
+                    .into(),
+            idle_timeout_secs: 10,
         }
     }
 }

@@ -74,19 +74,32 @@ jobs:
           name: clack-macos
           path: target/release/clack-macos
 
-  # Privacy guard: ensure no code logs KeyEvent or KeyCode values (§8)
+  # Privacy guard: ensure no code logs key codes or key events (§8)
   privacy-lint:
     name: Privacy lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Ensure no KeyEvent/KeyCode formatting in logging calls
+      - name: Ensure no logging calls expose key codes or key events
         run: |
-          # Fail if any tracing macro or println formats a KeyEvent or KeyCode
-          if grep -rn 'tracing::\|println!\|eprintln!\|format!' crates/ \
-             | grep -E '(KeyEvent|KeyCode)' \
-             | grep -v '//'; then
-            echo "ERROR: logging call formats a KeyEvent or KeyCode — privacy violation"
+          # Match info!/debug!/trace!/warn!/error!/println! calls whose argument
+          # text contains any of: code, ev, event, KeyEvent, KeyCode.
+          # Exclude: lines with a "// privacy-ok:" annotation, examples/ dirs,
+          # and pure comments (lines whose first non-whitespace chars are //).
+          HITS=$(grep -rnE \
+            '\b(info|debug|trace|warn|error|println|eprintln)!\s*\(' \
+            crates/ \
+            --include='*.rs' \
+            | grep -v 'examples/' \
+            | grep -vE '^\s*//' \
+            | grep -v '// privacy-ok:' \
+            | grep -E '\b(code|[^a-z]ev[^a-z]|event|KeyEvent|KeyCode)\b' \
+            || true)
+          if [ -n "$HITS" ]; then
+            echo "ERROR: logging call may expose key data — privacy violation:"
+            echo "$HITS"
+            echo ""
+            echo "If this is intentional, add a trailing  // privacy-ok: <reason>"
             exit 1
           fi
           echo "Privacy lint passed."
