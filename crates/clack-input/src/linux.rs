@@ -64,7 +64,7 @@ fn run_loop(tx: Sender<KeyEvent>, stop: Arc<AtomicBool>) -> Result<()> {
 
     // Set up inotify to watch /dev/input for hotplug events.
     let mut inotify = Inotify::init().context("initialising inotify")?;
-    
+
     // Set inotify to non-blocking
     use std::os::fd::AsRawFd;
     unsafe {
@@ -107,7 +107,7 @@ fn run_loop(tx: Sender<KeyEvent>, stop: Arc<AtomicBool>) -> Result<()> {
                                 state,
                                 at: Instant::now(),
                             };
-                            
+
                             if !dedupe.filter(&dev_phys, &event) {
                                 continue;
                             }
@@ -193,25 +193,25 @@ impl DedupeFilter {
 
         let key = (base_phys.to_string(), ev.code);
         let now = Instant::now();
-        
+
         if let Some(last_at) = self.recent_downs.get(&key) {
             if now.duration_since(*last_at).as_millis() < 5 {
                 return false; // dedupe
             }
         }
-        
+
         self.recent_downs.insert(key, now);
-        
+
         // Clean up old entries periodically to prevent unbounded growth.
         // Doing it probabilistically or lazily is fine.
         if self.recent_downs.len() > 100 {
-            self.recent_downs.retain(|_, at| now.duration_since(*at).as_millis() < 100);
+            self.recent_downs
+                .retain(|_, at| now.duration_since(*at).as_millis() < 100);
         }
-        
+
         true
     }
 }
-
 
 // ── Device helpers ────────────────────────────────────────────────────────────
 
@@ -332,13 +332,13 @@ mod tests {
 
         // First down from keyboard 1 should pass.
         assert!(filter.filter("usb-0000:00:14.0-2.4/input0", &ev));
-        
+
         // Second down from keyboard 2 (same phys root) within 5ms should be filtered.
         assert!(!filter.filter("usb-0000:00:14.0-2.4/input1", &ev));
-        
+
         // Down from entirely different keyboard should pass.
         assert!(filter.filter("usb-0000:00:14.0-3/input0", &ev));
-        
+
         // Up events should always pass.
         let up_ev = KeyEvent {
             code: 30,

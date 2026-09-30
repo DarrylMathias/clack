@@ -26,6 +26,9 @@ impl std::fmt::Display for ToggleBinding {
     }
 }
 
+pub const DEFAULT_SPEAKER_SINK: &str =
+    "alsa_output.pci-0000_00_1f.3-platform-skl_hda_dsp_generic.HiFi__Speaker__sink";
+
 /// Persisted user config (`~/.config/clack/config.toml`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -38,9 +41,9 @@ pub struct Config {
     pub humanize: bool,
     /// PipeWire node.name of the built-in speaker sink.
     /// Clack will ONLY output here; it never follows the default sink.
-    /// If empty, the PIPEWIRE_NODE env var (or service Environment=) is used.
+    /// If None, DEFAULT_SPEAKER_SINK is used.
     /// If the sink does not exist, clack logs a warning and stays idle.
-    pub speaker_sink: String,
+    pub output_sink: Option<String>,
     /// Seconds of silence after which the audio stream is closed.
     /// The stream reopens automatically on the next keypress.
     /// Set to 0 to keep the stream permanently open.
@@ -55,15 +58,17 @@ impl Default for Config {
             toggle: ToggleBinding::DoubleCtrl,
             release_sounds: true,
             humanize: true,
-            speaker_sink:
-                "alsa_output.pci-0000_00_1f.3-platform-skl_hda_dsp_generic.HiFi__Speaker__sink"
-                    .into(),
+            output_sink: None,
             idle_timeout_secs: 10,
         }
     }
 }
 
 impl Config {
+    pub fn effective_output_sink(&self) -> &str {
+        self.output_sink.as_deref().unwrap_or(DEFAULT_SPEAKER_SINK)
+    }
+
     pub fn path() -> PathBuf {
         config_dir().join("config.toml")
     }
@@ -171,5 +176,7 @@ mod tests {
         let back: Config = toml::from_str(&raw).unwrap();
         assert_eq!(back.volume, cfg.volume);
         assert_eq!(back.toggle, cfg.toggle);
+        assert_eq!(back.output_sink, cfg.output_sink);
+        assert_eq!(back.idle_timeout_secs, cfg.idle_timeout_secs);
     }
 }

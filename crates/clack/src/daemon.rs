@@ -48,7 +48,7 @@ enum EngineMsg {
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
-pub fn run() -> Result<()> {
+pub fn run(cli_sink: Option<String>) -> Result<()> {
     // Ensure log dir exists.
     let log_dir = log_path();
     if let Some(dir) = log_dir.parent() {
@@ -69,13 +69,24 @@ pub fn run() -> Result<()> {
     let config = Config::load().context("loading config")?;
     let state = State::load().unwrap_or_default();
 
-    // Resolve speaker sink: config takes precedence over the env var, which
-    // takes precedence over the hard-coded default.
-    let speaker_sink = if !config.speaker_sink.is_empty() {
-        config.speaker_sink.clone()
-    } else {
-        std::env::var("PIPEWIRE_NODE").unwrap_or_default()
-    };
+    // Priority: CLI override -> PIPEWIRE_NODE env -> config.output_sink -> default
+    let output_sink = cli_sink
+        .or_else(|| {
+            std::env::var("PIPEWIRE_NODE")
+                .ok()
+                .filter(|s| !s.is_empty())
+        })
+        .or(config.output_sink.clone())
+        .unwrap_or_else(|| clack_core::config::DEFAULT_SPEAKER_SINK.to_string());
+
+    // Before opening the stream, set env PIPEWIRE_NODE=<that node name>
+    // (do it early in main, before threads spawn; std::env::set_var is fine in edition 2021).
+    unsafe {
+        std::env::set_var("PIPEWIRE_NODE", &output_sink);
+        if std::env::var("PIPEWIRE_LATENCY").is_err() {
+            std::env::set_var("PIPEWIRE_LATENCY", "256/48000");
+        }
+    }
 
     let idle_timeout = if config.idle_timeout_secs == 0 {
         None // keep stream permanently open
@@ -85,7 +96,7 @@ pub fn run() -> Result<()> {
 
     info!(
         "clack daemon starting — pack: {}, sink: {}",
-        config.default_pack, speaker_sink
+        config.default_pack, output_sink
     );
 
     install_signal_handler();
@@ -148,15 +159,13 @@ pub fn run() -> Result<()> {
     thread::Builder::new()
         .name("clack-engine".into())
         .spawn(move || {
-            // Build the engine handle (stream is not yet open).
-            let mut engine = Engine::new(speaker_sink.clone());
+            let mut engine: Option<Engine> = None;
 
             let device_rate = TARGET_RATE;
             device_rate_for_eng.store(device_rate, Ordering::Relaxed);
 
-            // Set initial gain (buffered — applied when stream opens).
+            // Set initial gain.
             let init_gain = perceptual_gain(config.volume);
-            engine.set_master_gain(init_gain);
             let mut current_gain = init_gain;
 
             info!("audio engine ready (stream will open on first keypress)");
@@ -186,12 +195,22 @@ pub fn run() -> Result<()> {
             let mut last_key_time: Option<Instant> = None;
 
             loop {
-                engine.gc();
+                if let Some(ref mut eng) = engine {
+                    eng.gc();
+
+                    // Stream error recovery.
+                    if eng.stream_error.load(Ordering::Relaxed) {
+                        if let Err(e) = eng.restart(current_gain) {
+                            error!("stream restart failed: {e:#}");
+                            engine = None;
+                        }
+                    }
+                }
 
                 // ── Idle timeout: close stream if inactive long enough ─────
                 if let (Some(timeout), Some(last)) = (idle_timeout, last_key_time) {
-                    if engine.is_open() && last.elapsed() >= timeout {
-                        engine.close();
+                    if engine.is_some() && last.elapsed() >= timeout {
+                        engine = None; // drops the Engine (closes the stream)
                         last_key_time = None;
                         info!("stream closed after idle timeout");
                     }
@@ -202,8 +221,10 @@ pub fn run() -> Result<()> {
                     match msg {
                         EngineMsg::SetBank(b) => bank = b,
                         EngineMsg::SetGain(g) => {
-                            engine.set_master_gain(g);
                             current_gain = g;
+                            if let Some(ref mut eng) = engine {
+                                eng.set_master_gain(g);
+                            }
                         }
                         EngineMsg::Reload => {
                             // Reload config and pack inside the engine thread.
@@ -215,18 +236,15 @@ pub fn run() -> Result<()> {
                                     info!("reloaded pack '{}'", cfg.default_pack);
                                 }
                                 let g = perceptual_gain(cfg.volume);
-                                engine.set_master_gain(g);
                                 current_gain = g;
+                                if let Some(ref mut eng) = engine {
+                                    eng.set_master_gain(g);
+                                }
                             }
                         }
-                        EngineMsg::Shutdown => return,
-                    }
-                }
-
-                // Stream error recovery.
-                if engine.check_error() {
-                    if let Err(e) = engine.restart(current_gain) {
-                        error!("stream restart failed: {e:#}");
+                        EngineMsg::Shutdown => {
+                            return;
+                        }
                     }
                 }
 
@@ -241,11 +259,24 @@ pub fn run() -> Result<()> {
                     let was = muted_eng.fetch_xor(true, Ordering::SeqCst);
                     let now_muted = !was;
                     info!("toggle: {}", if now_muted { "muted" } else { "unmuted" });
-                    play_tone(&mut engine, !now_muted);
-                    let _ = State { muted: now_muted }.save();
                     if !now_muted {
-                        last_key_time = Some(Instant::now());
+                        if engine.is_none() {
+                            match Engine::start() {
+                                Ok(mut eng) => {
+                                    eng.set_master_gain(current_gain);
+                                    engine = Some(eng);
+                                }
+                                Err(e) => {
+                                    warn!("failed to start audio engine: {e:#}");
+                                }
+                            }
+                        }
+                        if let Some(ref mut eng) = engine {
+                            play_tone(eng, true);
+                            last_key_time = Some(Instant::now());
+                        }
                     }
+                    let _ = State { muted: now_muted }.save();
                     continue;
                 }
 
@@ -268,8 +299,23 @@ pub fn run() -> Result<()> {
                     } else {
                         (1.0f32, 1.0f32)
                     };
-                    engine.play(samples, channels, rate, gain);
-                    last_key_time = Some(Instant::now());
+
+                    if engine.is_none() {
+                        match Engine::start() {
+                            Ok(mut eng) => {
+                                eng.set_master_gain(current_gain);
+                                engine = Some(eng);
+                            }
+                            Err(e) => {
+                                warn!("failed to start audio engine: {e:#}");
+                            }
+                        }
+                    }
+
+                    if let Some(ref mut eng) = engine {
+                        eng.play(samples, channels, rate, gain);
+                        last_key_time = Some(Instant::now());
+                    }
                 }
             }
         })?;

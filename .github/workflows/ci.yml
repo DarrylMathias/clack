@@ -83,17 +83,14 @@ jobs:
       - name: Ensure no logging calls expose key codes or key events
         run: |
           # Match info!/debug!/trace!/warn!/error!/println! calls whose argument
-          # text contains any of: code, ev, event, KeyEvent, KeyCode.
-          # Exclude: lines with a "// privacy-ok:" annotation, examples/ dirs,
-          # and pure comments (lines whose first non-whitespace chars are //).
+          # text contains any of: code, event, ev, KeyEvent, KeyCode.
+          # Exclude: lines with a "// privacy-ok:" annotation and examples/ dirs.
           HITS=$(grep -rnE \
-            '\b(info|debug|trace|warn|error|println|eprintln)!\s*\(' \
+            '\b(info|debug|trace|warn|error|println|eprintln)!\s*\(.*(code|event|\bev\b|KeyEvent|KeyCode)' \
             crates/ \
             --include='*.rs' \
             | grep -v 'examples/' \
-            | grep -vE '^\s*//' \
             | grep -v '// privacy-ok:' \
-            | grep -E '\b(code|[^a-z]ev[^a-z]|event|KeyEvent|KeyCode)\b' \
             || true)
           if [ -n "$HITS" ]; then
             echo "ERROR: logging call may expose key data — privacy violation:"

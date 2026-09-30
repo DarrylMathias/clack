@@ -76,7 +76,7 @@ pub fn import(src: &Path, dest: &Path, license: &str) -> Result<Manifest> {
         let vc = match vc_str.parse::<u32>() {
             Ok(v) => v,
             Err(_) => {
-                warn!("Invalid keycode format in config.json: {}", vc_str);
+                warn!("Invalid keycode format in config.json"); // privacy-ok: json format validation error, no key data
                 continue;
             }
         };

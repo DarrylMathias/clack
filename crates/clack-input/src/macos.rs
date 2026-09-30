@@ -34,8 +34,7 @@ use crate::InputBackend;
 // We call these via raw FFI so that the crate compiles on Linux CI.
 // On macOS the symbols are provided by the CoreGraphics and CoreFoundation frameworks.
 
-#![allow(non_upper_case_globals)]
-
+#[allow(non_upper_case_globals)]
 #[allow(non_camel_case_types)]
 mod ffi {
     use std::ffi::c_void;
@@ -179,7 +178,7 @@ unsafe extern "C" fn tap_callback(
         let tap = *state.tap.get();
         if !tap.is_null() {
             unsafe { ffi::CGEventTapEnable(tap, 1) };
-            warn!("CGEventTap re-enabled after timeout");
+            warn!("CGEventTap re-enabled after timeout"); // privacy-ok: CGEventTap lifecycle, no key data
         }
         return event;
     }
@@ -305,7 +304,7 @@ impl InputBackend for MacosInput {
         // Store the tap handle back into TapState so the callback can re-enable it.
         unsafe { *(*state_ptr).tap.get() = tap };
 
-        info!("macOS CGEventTap created");
+        info!("macOS CGEventTap created"); // privacy-ok: CGEventTap lifecycle, no key data
 
         // Wire the tap into a CFRunLoopSource and run the loop on this thread.
         unsafe {
@@ -320,7 +319,7 @@ impl InputBackend for MacosInput {
 
         // Reconstitute and drop TapState.
         unsafe { drop(Box::from_raw(state_ptr)) };
-        info!("macOS CGEventTap stopped");
+        info!("macOS CGEventTap stopped"); // privacy-ok: CGEventTap lifecycle, no key data
         Ok(())
     }
 

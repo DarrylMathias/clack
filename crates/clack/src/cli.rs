@@ -85,7 +85,10 @@ pub enum Commands {
     // HIDDEN
     /// Run the daemon in the foreground (used by the service manager)
     #[command(hide = true)]
-    Daemon,
+    Daemon {
+        #[arg(long, visible_alias = "output-sink")]
+        sink: Option<String>,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -121,9 +124,9 @@ impl Cli {
                 Ok(())
             }
 
-            Some(Commands::Daemon) => {
+            Some(Commands::Daemon { sink }) => {
                 crate::daemon::install_signal_handler();
-                crate::daemon::run()
+                crate::daemon::run(sink)
             }
 
             Some(Commands::Status) => {

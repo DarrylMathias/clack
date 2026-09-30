@@ -18,9 +18,10 @@ pub fn install_and_start() -> Result<()> {
         let svc_path = sysd_dir.join("clack.service");
         let exe = std::env::current_exe()?;
         // Read the configured speaker sink so the unit matches the binary.
-        let speaker_sink = clack_core::config::Config::load()
+        let output_sink = clack_core::config::Config::load()
             .unwrap_or_default()
-            .speaker_sink;
+            .effective_output_sink()
+            .to_string();
         let content = format!(
             "[Unit]\n\
             Description=Clack Keyboard Sounds\n\
@@ -36,7 +37,7 @@ pub fn install_and_start() -> Result<()> {
             [Install]\n\
             WantedBy=default.target\n",
             exe.display(),
-            speaker_sink,
+            output_sink,
         );
         std::fs::write(&svc_path, content)?;
         // Always reload so the new unit takes effect.

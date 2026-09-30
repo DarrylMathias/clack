@@ -32,7 +32,7 @@ pub fn load_pack(pack_dir: &Path, target_rate: u32) -> Result<SampleBank> {
     // Decode the sprite (if sprite mode) or all per-key files.
     let sprite_decoded: Option<(Vec<f32>, u32, u16)> = if let Some(ref sprite) = manifest.sprite {
         let sprite_path = pack_dir.join(sprite);
-        debug!("decoding sprite: {}", sprite_path.display());
+        debug!("decoding sprite: {}", sprite_path.display()); // privacy-ok: sprite decoding, no key data
         let (samples, rate, channels) = decode_file(&sprite_path)
             .with_context(|| format!("decoding sprite {}", sprite_path.display()))?;
         Some((samples, rate, channels))
@@ -181,7 +181,7 @@ fn decode_file(path: &Path) -> Result<(Vec<f32>, u32, u16)> {
                 break
             }
             Err(symphonia::core::errors::Error::ResetRequired) => {
-                warn!("decoder reset required");
+                warn!("decoder reset required"); // privacy-ok: audio decoder reset, no key data
                 break;
             }
             Err(e) => bail!("packet error: {e}"),

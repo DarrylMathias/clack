@@ -24,7 +24,7 @@ pub fn setup_permissions() -> Result<()> {
         "KERNEL==\"event*\", SUBSYSTEM==\"input\", GROUP=\"input\", MODE=\"0660\""
     };
 
-    println!("We need to install a udev rule to allow reading keyboard events.");
+    println!("We need to install a udev rule to allow reading keyboard events."); // privacy-ok: prose message, no key data
     println!("This requires sudo.");
 
     let rule_path = "/etc/udev/rules.d/70-clack.rules";
