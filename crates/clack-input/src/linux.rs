@@ -20,7 +20,7 @@ use std::{
 
 use anyhow::{Context, Result};
 use crossbeam_channel::Sender;
-use evdev::{Device, InputEventKind, Key};
+use evdev::{Device, InputEventKind, Key, RelativeAxisType};
 use inotify::{Inotify, WatchMask};
 use tracing::{debug, warn};
 
@@ -235,11 +235,28 @@ fn enumerate_keyboards() -> Vec<PathBuf> {
         .collect()
 }
 
-/// Heuristic: the device reports EV_KEY and has KEY_A through KEY_Z and KEY_SPACE.
+/// Returns true if the device is a keyboard we should listen to.
+///
+/// Positive signal: must report alpha keys (KEY_A, KEY_Z, KEY_SPACE).
+/// Negative signals — immediately rejected:
+///   - Has relative axes (EV_REL): definitive marker for mice and trackballs.
+///   - Has X/Y absolute axes but no alpha keys: standalone touchpad node.
+///
+/// This prevents gaming mice (which advertise macro keys alongside BTN_LEFT)
+/// and touchpad click nodes from being mistaken for keyboards.
 fn is_keyboard(path: &Path) -> bool {
     let Ok(dev) = Device::open(path) else {
         return false;
     };
+
+    // Reject mice and trackballs — they report relative X/Y movement.
+    if dev.supported_relative_axes().is_some_and(|axes| {
+        axes.contains(RelativeAxisType::REL_X) || axes.contains(RelativeAxisType::REL_Y)
+    }) {
+        return false;
+    }
+
+    // Must have the core alpha keys that identify a real keyboard.
     let Some(supported) = dev.supported_keys() else {
         return false;
     };

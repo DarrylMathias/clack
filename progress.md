@@ -1,24 +1,22 @@
 # clack — Implementation Progress & Agent Handover
 
 > Tracking execution of `implementation.md` phases.  
-> Last updated: 2026-09-25 (end of agent session)
+> Last updated: 2026-10-18
 
 This document is extremely detailed to ensure the next agent understands exactly what is complete, what was skipped and subsequently fixed, what remains to be implemented, and where ambiguities or technical hurdles stand.
 
 
-> ## ▶ NEXT AGENT — START HERE (updated 2026-09-25)
+> ## ▶ NEXT AGENT — START HERE (updated 2026-10-18)
 >
-> **Goal: an end-to-end working prototype on Darryl's machine (Arch + Hyprland).** He wants to install it, type anywhere,
-> and hear keyboard sounds, with clack starting at login. **Scope: M2.11 - M2.13 (Pack Manager) -> M3 (Onboarding).**
+> **The prototype is working.** Darryl types anywhere on Arch + Hyprland and hears sounds. The service autostarts at login.
 >
-> M2 (core fixes and linux service/permissions) has been completed up to M2.10. 
-> Dedupe is tested. Single instance socket is implemented.
-> 
-> **Next steps:**
-> - M2.11-M2.13: `clack list`, `clack pack add`, Catalog fetching. (DONE)
-> - Handover to Darryl to test the service manually (DONE: verified working in earphones tho!).
-> 
-> Next is Milestone M3: M3.1 Scaffold packs repo, M3.4 Onboarding TUI.
+> **Read `next.md` — it is the complete task plan for everything remaining (M3 → M4 → v0.1.0 release).**
+>
+> **What was done 2026-10-18:**
+> - Bug fix: mouse clicks and touchpad taps were triggering sounds. Fixed by rejecting any evdev device that reports `EV_REL` (relative axes — the kernel-level marker for pointer devices). See `crates/clack-input/src/linux.rs` `is_keyboard()`. Verified working manually.
+> - Wrote `next.md`: full handover plan for M3 (packs repo, onboarding TUI, doctor, update, uninstall, release pipeline) and M4 (test matrix, docs, v0.1.0).
+>
+> **Your scope: M3 → M4 → v0.1.0.** Start with M2.1–M2.5 (audio quality fixes), then M3.1 (packs repo) and M3.4 (onboarding TUI) in parallel.
 
 ---
 
