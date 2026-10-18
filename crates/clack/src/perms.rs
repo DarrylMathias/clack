@@ -1,4 +1,7 @@
-use anyhow::{Context, Result};
+#[cfg(target_os = "linux")]
+use anyhow::Context;
+use anyhow::Result;
+#[cfg(target_os = "linux")]
 use std::process::Command;
 
 #[cfg(target_os = "linux")]

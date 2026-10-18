@@ -1,6 +1,8 @@
 //! `clack uninstall` — remove clack from this machine (§5.13, M3.8).
 
-use std::{fs, io::Write, path::Path};
+#[cfg(target_os = "linux")]
+use std::path::Path;
+use std::{fs, io::Write};
 
 use anyhow::Result;
 

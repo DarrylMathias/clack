@@ -2,6 +2,7 @@
 //!
 //! Prints a ✓ / ✗ / ! line for each system health check with exact fix commands.
 
+#[cfg(target_os = "linux")]
 use std::path::Path;
 
 use anyhow::Result;
@@ -255,9 +256,10 @@ fn check_input_access() -> CheckResult {
             detail: Some("No input devices currently matched keyboard heuristics.".into()),
             fix: Some("Plug in a keyboard or check /dev/input permissions.".into()),
         },
-        Err(e) => {
+        Err(_e) => {
             #[cfg(target_os = "linux")]
             {
+                let e = _e;
                 let udev_rule = Path::new("/etc/udev/rules.d/70-clack.rules");
                 let rule_exists = udev_rule.exists();
 

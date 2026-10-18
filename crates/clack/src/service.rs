@@ -1,5 +1,7 @@
 use anyhow::Result;
+#[cfg(target_os = "linux")]
 use dirs::config_dir;
+#[cfg(target_os = "linux")]
 use std::path::PathBuf;
 use std::process::Command;
 
