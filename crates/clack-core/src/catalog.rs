@@ -12,65 +12,7 @@ const INDEX_URL: &str =
     "https://github.com/DarrylMathias/clack/releases/latest/download/index.json";
 const CACHE_TTL: Duration = Duration::from_secs(24 * 60 * 60); // 24 hours
 
-const DEFAULT_CATALOG: &str = r#"{
-  "packs": [
-    {
-      "id": "cherrymx-blue-abs",
-      "name": "Cherry MX Blue (ABS)",
-      "family": "clicky",
-      "license": "MIT",
-      "starter": true,
-      "size": 1720000,
-      "sha256": "",
-      "url": "https://github.com/DarrylMathias/clack/releases/latest/download/cherrymx-blue-abs.tar.gz",
-      "blurb": "Crisp and classic clicky switch with ABS keycaps"
-    },
-    {
-      "id": "cherrymx-brown-abs",
-      "name": "Cherry MX Brown (ABS)",
-      "family": "tactile",
-      "license": "MIT",
-      "starter": true,
-      "size": 1700000,
-      "sha256": "",
-      "url": "https://github.com/DarrylMathias/clack/releases/latest/download/cherrymx-brown-abs.tar.gz",
-      "blurb": "Balanced tactile bump with muted bottom-out"
-    },
-    {
-      "id": "cherrymx-black-abs",
-      "name": "Cherry MX Black (ABS)",
-      "family": "linear",
-      "license": "MIT",
-      "starter": true,
-      "size": 1700000,
-      "sha256": "",
-      "url": "https://github.com/DarrylMathias/clack/releases/latest/download/cherrymx-black-abs.tar.gz",
-      "blurb": "Heavy smooth linear switch"
-    },
-    {
-      "id": "cherrymx-red-pbt",
-      "name": "Cherry MX Red (PBT)",
-      "family": "linear",
-      "license": "MIT",
-      "starter": true,
-      "size": 1700000,
-      "sha256": "",
-      "url": "https://github.com/DarrylMathias/clack/releases/latest/download/cherrymx-red-pbt.tar.gz",
-      "blurb": "Light linear travel with deep PBT thock"
-    },
-    {
-      "id": "eg-oreo",
-      "name": "Everglide Oreo",
-      "family": "tactile",
-      "license": "MIT",
-      "starter": true,
-      "size": 1700000,
-      "sha256": "",
-      "url": "https://github.com/DarrylMathias/clack/releases/latest/download/eg-oreo.tar.gz",
-      "blurb": "Snappy tactile switch with sharp feedback"
-    }
-  ]
-}"#;
+const DEFAULT_CATALOG: &str = include_str!("../../../assets/index.json");
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CatalogEntry {

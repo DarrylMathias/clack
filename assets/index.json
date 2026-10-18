@@ -1,0 +1,147 @@
+{
+  "packs": [
+    {
+      "id": "ibm-model-m",
+      "name": "IBM Model M (1985)",
+      "family": "buckling",
+      "license": "GPL-2.0",
+      "starter": true,
+      "size": 3797767,
+      "sha256": "692712cd19bc3e2592b61dd768e6956d66c563e5361209e708e6aaddc2f369e4",
+      "url": "https://github.com/DarrylMathias/clack/releases/latest/download/ibm-model-m.tar.gz",
+      "blurb": "The 1985 buckling-spring original. Loud, proud, indestructible."
+    },
+    {
+      "id": "alps-skcm-blue",
+      "name": "Alps SKCM Blue",
+      "family": "clicky",
+      "license": "MIT",
+      "starter": true,
+      "size": 26044,
+      "sha256": "4e9d1b2b7a49ce08a3be528a2ffc41fc65f9997c222f4f92aee21033dde825fe",
+      "url": "https://github.com/DarrylMathias/clack/releases/latest/download/alps-skcm-blue.tar.gz",
+      "blurb": "Vintage complicated blue Alps with tactile click leaf."
+    },
+    {
+      "id": "typewriter",
+      "name": "Electric Typewriter",
+      "family": "typewriter",
+      "license": "GPL-3.0",
+      "starter": true,
+      "size": 243854,
+      "sha256": "7f6c46c3a578089f6072d2c2442adaff0d3d626cfb59abc7443552134a496dd8",
+      "url": "https://github.com/DarrylMathias/clack/releases/latest/download/typewriter.tar.gz",
+      "blurb": "Vintage typewriter mechanical striker and carriage action."
+    },
+    {
+      "id": "cherrymx-blue-pbt",
+      "name": "Cherry MX Blue (PBT)",
+      "family": "clicky",
+      "license": "MIT",
+      "starter": true,
+      "size": 2461979,
+      "sha256": "8679b01c932beb5797bb4c6c6253a2897ce48cddf8a57e93315e11cd9b457d25",
+      "url": "https://github.com/DarrylMathias/clack/releases/latest/download/cherrymx-blue-pbt.tar.gz",
+      "blurb": "Crisp clicky switch with dense, deeper PBT keycaps."
+    },
+    {
+      "id": "cherrymx-blue-abs",
+      "name": "Cherry MX Blue (ABS)",
+      "family": "clicky",
+      "license": "MIT",
+      "starter": true,
+      "size": 2031835,
+      "sha256": "d652ddf4a98eaac8e1333b3ac728169307d663261ab03c56f7c7bcc276459a87",
+      "url": "https://github.com/DarrylMathias/clack/releases/latest/download/cherrymx-blue-abs.tar.gz",
+      "blurb": "Crisp and classic clicky switch with ABS keycaps."
+    },
+    {
+      "id": "cherrymx-brown-pbt",
+      "name": "Cherry MX Brown (PBT)",
+      "family": "tactile",
+      "license": "MIT",
+      "starter": true,
+      "size": 1924932,
+      "sha256": "dff39a589dcf236f26693ea9cd3375769a26a1cacaa1c04b3a6cf61aa3d9c75d",
+      "url": "https://github.com/DarrylMathias/clack/releases/latest/download/cherrymx-brown-pbt.tar.gz",
+      "blurb": "Subtle tactile bump paired with solid PBT keycaps."
+    },
+    {
+      "id": "cherrymx-brown-abs",
+      "name": "Cherry MX Brown (ABS)",
+      "family": "tactile",
+      "license": "MIT",
+      "starter": true,
+      "size": 1864336,
+      "sha256": "4267906626c36ebe09008b4ec6c082f1082faa817315c7c31b3c9e7cd9bb106e",
+      "url": "https://github.com/DarrylMathias/clack/releases/latest/download/cherrymx-brown-abs.tar.gz",
+      "blurb": "Balanced tactile bump with muted bottom-out."
+    },
+    {
+      "id": "cherrymx-black-abs",
+      "name": "Cherry MX Black (ABS)",
+      "family": "linear",
+      "license": "MIT",
+      "starter": true,
+      "size": 2647231,
+      "sha256": "e6ad9c7b41311af8e42872a4c31887fa7f472a6f088eef14bbd37ec52f5c0769",
+      "url": "https://github.com/DarrylMathias/clack/releases/latest/download/cherrymx-black-abs.tar.gz",
+      "blurb": "Heavy smooth linear switch."
+    },
+    {
+      "id": "kailh-box-white",
+      "name": "Kailh Box White",
+      "family": "clicky",
+      "license": "Community / CC-BY",
+      "starter": true,
+      "size": 140058,
+      "sha256": "66d9ab224d36fbfe98f82f8aa4ef3aaa5f2044f739c9260c13c3cf62731a8712",
+      "url": "https://github.com/DarrylMathias/clack/releases/latest/download/kailh-box-white.tar.gz",
+      "blurb": "Modern clickbar switch with sharp click on press and release."
+    },
+    {
+      "id": "cream-travel",
+      "name": "NovelKeys Cream (Full Travel)",
+      "family": "linear",
+      "license": "MIT",
+      "starter": true,
+      "size": 19720,
+      "sha256": "57152e7fcd9109b7398ddba57b598dc1bad33871d1a21a32ff7cc1e5f1a2de07",
+      "url": "https://github.com/DarrylMathias/clack/releases/latest/download/cream-travel.tar.gz",
+      "blurb": "Self-lubricating POM linear switch with full travel bottom-out."
+    },
+    {
+      "id": "telios-v2",
+      "name": "Zeal Tealios V2",
+      "family": "linear",
+      "license": "GPL-3.0",
+      "starter": true,
+      "size": 364044,
+      "sha256": "1eaf4f033292aa7c9f75ed3a38a58836d6075409aae067709cdd9ca22194d262",
+      "url": "https://github.com/DarrylMathias/clack/releases/latest/download/telios-v2.tar.gz",
+      "blurb": "Ultra-smooth premium linear switch."
+    },
+    {
+      "id": "cherrymx-red-pbt",
+      "name": "Cherry MX Red (PBT)",
+      "family": "linear",
+      "license": "MIT",
+      "starter": false,
+      "size": 2443599,
+      "sha256": "205a065038919ee561b07fc620f1137fcce5f4edd97e28706512bf8175e23574",
+      "url": "https://github.com/DarrylMathias/clack/releases/latest/download/cherrymx-red-pbt.tar.gz",
+      "blurb": "Light linear travel with deep PBT thock."
+    },
+    {
+      "id": "eg-oreo",
+      "name": "Everglide Oreo",
+      "family": "tactile",
+      "license": "MIT",
+      "starter": false,
+      "size": 316883,
+      "sha256": "4ddf5ffb7e1ab0ac0dda7251cb0284d87dd529cfb9999d03498216e8aa5ed7d1",
+      "url": "https://github.com/DarrylMathias/clack/releases/latest/download/eg-oreo.tar.gz",
+      "blurb": "Snappy tactile switch with sharp feedback."
+    }
+  ]
+}

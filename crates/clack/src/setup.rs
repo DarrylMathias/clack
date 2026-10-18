@@ -113,40 +113,21 @@ fn run_picker() -> Result<String> {
         }
     }
 
-    // If no packs installed yet, provide the standard starter pack list
+    // If no packs installed yet, populate with starter packs from the catalog
     if packs.is_empty() {
-        packs = vec![
-            PackItem {
-                id: "cherrymx-blue-abs".into(),
-                name: "Cherry MX Blue (ABS)".into(),
-                family: "clicky".into(),
-                status: "ready".into(),
-            },
-            PackItem {
-                id: "cherrymx-brown-abs".into(),
-                name: "Cherry MX Brown (ABS)".into(),
-                family: "tactile".into(),
-                status: "ready".into(),
-            },
-            PackItem {
-                id: "cherrymx-black-abs".into(),
-                name: "Cherry MX Black (ABS)".into(),
-                family: "linear".into(),
-                status: "ready".into(),
-            },
-            PackItem {
-                id: "cherrymx-red-pbt".into(),
-                name: "Cherry MX Red (PBT)".into(),
-                family: "linear".into(),
-                status: "ready".into(),
-            },
-            PackItem {
-                id: "eg-oreo".into(),
-                name: "Everglide Oreo".into(),
-                family: "tactile".into(),
-                status: "ready".into(),
-            },
-        ];
+        if let Ok(cat) = clack_core::catalog::fetch_catalog() {
+            packs = cat
+                .packs
+                .into_iter()
+                .filter(|p| p.starter)
+                .map(|p| PackItem {
+                    id: p.id,
+                    name: p.name,
+                    family: p.family,
+                    status: "ready".into(),
+                })
+                .collect();
+        }
     }
 
     // Start local audio engine for live interactive preview
