@@ -1,0 +1,91 @@
+name: Release
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux-x86_64:
+    name: Build Linux x86_64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Linux audio headers
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+      - name: Build release binary
+        run: cargo build --release
+      - name: Stage binary
+        run: cp target/release/clack clack-linux-x86_64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: clack-linux-x86_64
+          path: clack-linux-x86_64
+
+  build-macos:
+    name: Build macOS Universal
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin, x86_64-apple-darwin
+      - name: Build Apple Silicon and Intel binaries
+        run: |
+          cargo build --release --target aarch64-apple-darwin
+          cargo build --release --target x86_64-apple-darwin
+          lipo -create -output clack-macos target/aarch64-apple-darwin/release/clack target/x86_64-apple-darwin/release/clack
+      - uses: actions/upload-artifact@v4
+        with:
+          name: clack-macos
+          path: clack-macos
+
+  package-sound-packs:
+    name: Package Starter Sound Packs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build packs and index.json
+        run: python3 scripts/build_packs.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sound-packs
+          path: |
+            dist/index.json
+            dist/packs/*.tar.gz
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [build-linux-x86_64, build-macos, package-sound-packs]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Stage installer and checksums
+        run: |
+          cp clack-installer.sh release-assets/
+          find release-assets -mindepth 2 -type f -exec mv {} release-assets/ \;
+          find release-assets -type d -empty -delete
+          cd release-assets
+          sha256sum clack-linux-x86_64 clack-macos > SHA256SUMS.txt
+          ls -la
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-assets/*
+          generate_release_notes: true
+          draft: false
+          prerelease: false

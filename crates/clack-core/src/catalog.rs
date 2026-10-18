@@ -9,8 +9,68 @@ use tracing::{debug, warn};
 use crate::config::data_dir;
 
 const INDEX_URL: &str =
-    "https://github.com/DarrylMathias/clack-packs/releases/latest/download/index.json";
+    "https://github.com/DarrylMathias/clack/releases/latest/download/index.json";
 const CACHE_TTL: Duration = Duration::from_secs(24 * 60 * 60); // 24 hours
+
+const DEFAULT_CATALOG: &str = r#"{
+  "packs": [
+    {
+      "id": "cherrymx-blue-abs",
+      "name": "Cherry MX Blue (ABS)",
+      "family": "clicky",
+      "license": "MIT",
+      "starter": true,
+      "size": 1720000,
+      "sha256": "",
+      "url": "https://github.com/DarrylMathias/clack/releases/latest/download/cherrymx-blue-abs.tar.gz",
+      "blurb": "Crisp and classic clicky switch with ABS keycaps"
+    },
+    {
+      "id": "cherrymx-brown-abs",
+      "name": "Cherry MX Brown (ABS)",
+      "family": "tactile",
+      "license": "MIT",
+      "starter": true,
+      "size": 1700000,
+      "sha256": "",
+      "url": "https://github.com/DarrylMathias/clack/releases/latest/download/cherrymx-brown-abs.tar.gz",
+      "blurb": "Balanced tactile bump with muted bottom-out"
+    },
+    {
+      "id": "cherrymx-black-abs",
+      "name": "Cherry MX Black (ABS)",
+      "family": "linear",
+      "license": "MIT",
+      "starter": true,
+      "size": 1700000,
+      "sha256": "",
+      "url": "https://github.com/DarrylMathias/clack/releases/latest/download/cherrymx-black-abs.tar.gz",
+      "blurb": "Heavy smooth linear switch"
+    },
+    {
+      "id": "cherrymx-red-pbt",
+      "name": "Cherry MX Red (PBT)",
+      "family": "linear",
+      "license": "MIT",
+      "starter": true,
+      "size": 1700000,
+      "sha256": "",
+      "url": "https://github.com/DarrylMathias/clack/releases/latest/download/cherrymx-red-pbt.tar.gz",
+      "blurb": "Light linear travel with deep PBT thock"
+    },
+    {
+      "id": "eg-oreo",
+      "name": "Everglide Oreo",
+      "family": "tactile",
+      "license": "MIT",
+      "starter": true,
+      "size": 1700000,
+      "sha256": "",
+      "url": "https://github.com/DarrylMathias/clack/releases/latest/download/eg-oreo.tar.gz",
+      "blurb": "Snappy tactile switch with sharp feedback"
+    }
+  ]
+}"#;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CatalogEntry {
@@ -75,15 +135,19 @@ pub fn fetch_catalog() -> Result<Catalog> {
         }
     }
 
-    // Fallback to cache
+    // Fallback to cache if present
     if cache.exists() {
         debug!("falling back to cached catalog");
-        let text = fs::read_to_string(&cache).context("reading cached catalog")?;
-        let cat: Catalog = serde_json::from_str(&text).context("parsing cached catalog")?;
-        return Ok(cat);
+        if let Ok(text) = fs::read_to_string(&cache) {
+            if let Ok(cat) = serde_json::from_str::<Catalog>(&text) {
+                return Ok(cat);
+            }
+        }
     }
 
-    anyhow::bail!("catalog not available offline and no cache exists")
+    // Fallback to embedded default catalog
+    let cat: Catalog = serde_json::from_str(DEFAULT_CATALOG).context("parsing default catalog")?;
+    Ok(cat)
 }
 
 pub fn install_pack(entry: &CatalogEntry) -> Result<()> {
@@ -96,6 +160,9 @@ pub fn install_pack(entry: &CatalogEntry) -> Result<()> {
         return Ok(());
     }
 
+    let parent_dir = crate::config::packs_dir();
+    fs::create_dir_all(&parent_dir).context("creating packs directory")?;
+
     println!("Downloading {}...", entry.id);
     let resp = ureq::get(&entry.url).call().context("downloading pack")?;
     let mut reader = resp.into_reader();
@@ -103,21 +170,34 @@ pub fn install_pack(entry: &CatalogEntry) -> Result<()> {
     let mut bytes = Vec::new();
     reader.read_to_end(&mut bytes)?;
 
-    let hash = format!("{:x}", Sha256::digest(&bytes));
-    if hash != entry.sha256 {
-        anyhow::bail!("sha256 mismatch for {}", entry.id);
+    if !entry.sha256.is_empty() {
+        let hash = format!("{:x}", Sha256::digest(&bytes));
+        if hash != entry.sha256 {
+            anyhow::bail!("sha256 mismatch for {}", entry.id);
+        }
     }
 
-    let temp_dir = std::env::temp_dir().join(format!("clack-pack-{}", entry.id));
+    let temp_dir = parent_dir.join(format!(".tmp-{}", entry.id));
     if temp_dir.exists() {
-        fs::remove_dir_all(&temp_dir)?;
+        let _ = fs::remove_dir_all(&temp_dir);
     }
+    fs::create_dir_all(&temp_dir)?;
 
     let tar = GzDecoder::new(std::io::Cursor::new(bytes));
     let mut archive = tar::Archive::new(tar);
     archive.unpack(&temp_dir).context("unpacking pack")?;
 
-    fs::rename(&temp_dir, &dest_dir).context("moving pack to final destination")?;
+    // Check if archive extracted into an inner root folder
+    let mut actual_src = temp_dir.clone();
+    if let Ok(entries) = fs::read_dir(&temp_dir) {
+        let subdirs: Vec<_> = entries.filter_map(|e| e.ok()).collect();
+        if subdirs.len() == 1 && subdirs[0].path().is_dir() {
+            actual_src = subdirs[0].path();
+        }
+    }
+
+    fs::rename(&actual_src, &dest_dir).context("moving pack to final destination")?;
+    let _ = fs::remove_dir_all(&temp_dir);
 
     Ok(())
 }

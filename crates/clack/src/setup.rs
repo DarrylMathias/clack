@@ -117,27 +117,33 @@ fn run_picker() -> Result<String> {
     if packs.is_empty() {
         packs = vec![
             PackItem {
-                id: "cherrymx-blue-pbt".into(),
-                name: "Cherry MX Blue (PBT)".into(),
+                id: "cherrymx-blue-abs".into(),
+                name: "Cherry MX Blue (ABS)".into(),
                 family: "clicky".into(),
                 status: "ready".into(),
             },
             PackItem {
-                id: "cherrymx-brown-pbt".into(),
-                name: "Cherry MX Brown (PBT)".into(),
+                id: "cherrymx-brown-abs".into(),
+                name: "Cherry MX Brown (ABS)".into(),
                 family: "tactile".into(),
                 status: "ready".into(),
             },
             PackItem {
-                id: "ibm-model-m".into(),
-                name: "IBM Model M (1985)".into(),
-                family: "buckling".into(),
-                status: "available".into(),
+                id: "cherrymx-black-abs".into(),
+                name: "Cherry MX Black (ABS)".into(),
+                family: "linear".into(),
+                status: "ready".into(),
             },
             PackItem {
-                id: "cream-travel".into(),
-                name: "NK Cream (full travel)".into(),
+                id: "cherrymx-red-pbt".into(),
+                name: "Cherry MX Red (PBT)".into(),
                 family: "linear".into(),
+                status: "ready".into(),
+            },
+            PackItem {
+                id: "eg-oreo".into(),
+                name: "Everglide Oreo".into(),
+                family: "tactile".into(),
                 status: "ready".into(),
             },
         ];
@@ -162,6 +168,13 @@ fn run_picker() -> Result<String> {
             let sel = &packs[selected_idx];
             if sel.id != loaded_pack_id {
                 let pdir = pack_dir(&sel.id);
+                if !pdir.exists() {
+                    if let Ok(cat) = clack_core::catalog::fetch_catalog() {
+                        if let Some(entry) = cat.packs.iter().find(|e| e.id == sel.id) {
+                            let _ = clack_core::catalog::install_pack(entry);
+                        }
+                    }
+                }
                 if pdir.exists() {
                     if let Ok(bank) = load_pack(&pdir, 48_000) {
                         current_bank = Some(bank);

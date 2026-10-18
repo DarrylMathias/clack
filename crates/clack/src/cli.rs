@@ -337,10 +337,34 @@ impl Cli {
 
                         let resp = send_ok(&Command::AddPack {
                             path: path_to_add.to_string_lossy().into_owned(),
-                        })?;
-                        if let Some(s) = resp.status {
-                            if let Some(pack) = s.active_pack {
-                                println!("Pack imported and active: {}", pack);
+                        });
+                        match resp {
+                            Ok(r) => {
+                                if let Some(s) = r.status {
+                                    if let Some(pack) = s.active_pack {
+                                        println!("Pack imported and active: {}", pack);
+                                    }
+                                }
+                            }
+                            Err(_) => {
+                                let filename = path_to_add
+                                    .file_name()
+                                    .map(|s| s.to_string_lossy().to_string())
+                                    .unwrap_or_else(|| "imported-pack".to_string());
+                                let slug = filename
+                                    .trim_end_matches(".tar.gz")
+                                    .trim_end_matches(".tgz")
+                                    .trim_end_matches(".zip")
+                                    .to_lowercase()
+                                    .chars()
+                                    .map(|c| if c.is_alphanumeric() { c } else { '-' })
+                                    .collect::<String>()
+                                    .replace("--", "-")
+                                    .trim_matches('-')
+                                    .to_string();
+                                let dest = clack_core::pack::pack_dir(&slug);
+                                let manifest = clack_core::pack::import_pack(&path_to_add, &dest)?;
+                                println!("Pack imported: {} ({})", manifest.name, dest.display());
                             }
                         }
                         Ok(())

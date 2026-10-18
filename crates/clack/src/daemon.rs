@@ -484,6 +484,9 @@ fn handle_ipc(
 
             // basic slugify for the dest folder
             let slug = name
+                .trim_end_matches(".tar.gz")
+                .trim_end_matches(".tgz")
+                .trim_end_matches(".zip")
                 .to_lowercase()
                 .chars()
                 .map(|c| if c.is_alphanumeric() { c } else { '-' })
