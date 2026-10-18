@@ -146,9 +146,10 @@ pub const TARGET_RATE: u32 = 48_000;
 /// hard node quantum limit that disrupts other clients (including BT sinks).
 const PIPEWIRE_LATENCY_DEFAULT: &str = "256/48000";
 
-pub fn check_pipewire_node_exists(node_name: &str) -> bool {
+pub fn check_pipewire_node_exists(_node_name: &str) -> bool {
     #[cfg(target_os = "linux")]
     {
+        let node_name = _node_name;
         if node_name.is_empty() {
             return false;
         }

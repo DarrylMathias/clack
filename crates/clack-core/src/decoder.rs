@@ -50,7 +50,7 @@ pub fn load_pack(pack_dir: &Path, target_rate: u32) -> Result<SampleBank> {
         .press
         .default
         .as_ref()
-        .map(&resolve)
+        .map(resolve)
         .unwrap_or_default();
 
     for (code_str, sound_ref) in &manifest.press.keys {
@@ -63,7 +63,7 @@ pub fn load_pack(pack_dir: &Path, target_rate: u32) -> Result<SampleBank> {
 
     // Build release map (optional).
     let (release_map, release_default) = if let Some(ref rel) = manifest.release {
-        let def = rel.default.as_ref().map(&resolve).unwrap_or_default();
+        let def = rel.default.as_ref().map(resolve).unwrap_or_default();
         let mut map: Vec<Option<Vec<Clip>>> = vec![None; 256];
         for (code_str, sound_ref) in &rel.keys {
             if let Ok(code) = code_str.parse::<usize>() {
