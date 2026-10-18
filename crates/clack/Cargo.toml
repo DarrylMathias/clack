@@ -31,6 +31,10 @@ flate2.workspace = true
 tar.workspace = true
 zip.workspace = true
 crossterm.workspace = true
+cpal.workspace = true
 dirs.workspace = true
 signal-hook.workspace = true
 fastrand = "2"
+
+[dev-dependencies]
+tempfile = "3"

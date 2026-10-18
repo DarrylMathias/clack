@@ -236,24 +236,66 @@ fn push_samples(buf: &AudioBufferRef<'_>, out: &mut Vec<f32>) {
     }
 }
 
-// ── Nearest-neighbour resampler ───────────────────────────────────────────────
-//
-// Good enough for short click sounds; rubato can replace this if needed (D7).
+// ── Linear interpolation resampler (§M2.3) ────────────────────────────────────
 
-fn resample(samples: &[f32], src_rate: u32, dst_rate: u32, channels: u16) -> Vec<f32> {
-    if src_rate == dst_rate {
+pub fn resample(samples: &[f32], src_rate: u32, dst_rate: u32, channels: u16) -> Vec<f32> {
+    if src_rate == dst_rate || samples.is_empty() {
         return samples.to_vec();
     }
     let ch = channels as usize;
     let src_frames = samples.len() / ch;
+    if src_frames == 0 {
+        return Vec::new();
+    }
     let ratio = src_rate as f64 / dst_rate as f64;
-    let dst_frames = (src_frames as f64 / ratio) as usize;
+    let dst_frames = (src_frames as f64 / ratio).round() as usize;
     let mut out = Vec::with_capacity(dst_frames * ch);
     for i in 0..dst_frames {
-        let src_frame = ((i as f64 * ratio) as usize).min(src_frames - 1);
+        let exact_pos = i as f64 * ratio;
+        let frame0 = (exact_pos.floor() as usize).min(src_frames - 1);
+        let frame1 = (frame0 + 1).min(src_frames - 1);
+        let frac = (exact_pos - frame0 as f64) as f32;
+
         for c in 0..ch {
-            out.push(samples[src_frame * ch + c]);
+            let s0 = samples[frame0 * ch + c];
+            let s1 = samples[frame1 * ch + c];
+            out.push(s0 + frac * (s1 - s0));
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_linear_resample_sine() {
+        let src_rate = 44_100;
+        let dst_rate = 48_000;
+        let freq = 1000.0;
+        let num_src_samples = 4410; // 0.1 sec -> 100 cycles
+        let mut src = Vec::with_capacity(num_src_samples);
+        for i in 0..num_src_samples {
+            let t = i as f32 / src_rate as f32;
+            src.push((2.0 * std::f32::consts::PI * freq * t).sin());
+        }
+
+        let resampled = resample(&src, src_rate, dst_rate, 1);
+        let expected_dst_samples =
+            (num_src_samples as f64 * dst_rate as f64 / src_rate as f64).round() as usize;
+        assert_eq!(resampled.len(), expected_dst_samples);
+
+        // Count zero crossings
+        let mut zero_crossings: i32 = 0;
+        for i in 1..resampled.len() {
+            if (resampled[i - 1] <= 0.0 && resampled[i] > 0.0)
+                || (resampled[i - 1] >= 0.0 && resampled[i] < 0.0)
+            {
+                zero_crossings += 1;
+            }
+        }
+        // In 0.1s of 1000 Hz, there should be ~200 zero crossings
+        assert!((zero_crossings - 200).abs() <= 2);
+    }
 }

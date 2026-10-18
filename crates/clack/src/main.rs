@@ -7,9 +7,13 @@ use clap::Parser;
 
 mod cli;
 mod daemon;
+mod doctor;
 mod ipc_client;
 mod perms;
 mod service;
+mod setup;
+mod uninstall;
+mod update;
 
 use cli::Cli;
 

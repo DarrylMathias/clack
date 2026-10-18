@@ -116,21 +116,93 @@ pub fn restart() -> Result<()> {
     Ok(())
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "macos")]
+pub fn install_and_start() -> Result<()> {
+    if let Some(home) = dirs::home_dir() {
+        let launch_agents = home.join("Library/LaunchAgents");
+        std::fs::create_dir_all(&launch_agents)?;
+        let plist_path = launch_agents.join("dev.clack.plist");
+        let exe = std::env::current_exe()?;
+        let content = format!(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>dev.clack</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{}</string>
+        <string>daemon</string>
+    </array>
+    <key>KeepAlive</key>
+    <true/>
+    <key>RunAtLoad</key>
+    <true/>
+</dict>
+</plist>"#,
+            exe.display()
+        );
+        std::fs::write(&plist_path, content)?;
+
+        let uid = unsafe { libc::getuid() };
+        let _ = Command::new("launchctl")
+            .args([
+                "bootstrap",
+                &format!("gui/{uid}"),
+                plist_path.to_str().unwrap_or_default(),
+            ])
+            .status();
+        println!("clack started (launchd)");
+        return Ok(());
+    }
+    spawn_detached()?;
+    println!("clack started (detached)");
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+pub fn stop() -> Result<()> {
+    let uid = unsafe { libc::getuid() };
+    if let Some(home) = dirs::home_dir() {
+        let plist_path = home.join("Library/LaunchAgents/dev.clack.plist");
+        if plist_path.exists() {
+            let _ = Command::new("launchctl")
+                .args([
+                    "bootout",
+                    &format!("gui/{uid}"),
+                    plist_path.to_str().unwrap_or_default(),
+                ])
+                .status();
+        }
+    }
+    let _ = crate::ipc_client::send(&clack_core::ipc::Command::Shutdown);
+    println!("clack stopped");
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+pub fn restart() -> Result<()> {
+    stop()?;
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    install_and_start()
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
 pub fn install_and_start() -> Result<()> {
     spawn_detached()?;
     println!("clack started (detached)");
     Ok(())
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
 pub fn stop() -> Result<()> {
     let _ = crate::ipc_client::send(&clack_core::ipc::Command::Shutdown);
     println!("clack stopped");
     Ok(())
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
 pub fn restart() -> Result<()> {
     stop()?;
     std::thread::sleep(std::time::Duration::from_millis(500));

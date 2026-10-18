@@ -132,6 +132,11 @@ pub fn config_dir() -> PathBuf {
         .join("clack")
 }
 
+/// Path to `config.toml` (`~/.config/clack/config.toml`).
+pub fn config_path() -> PathBuf {
+    config_dir().join("config.toml")
+}
+
 /// `~/.local/share/clack/` (respects `$XDG_DATA_HOME`).
 pub fn data_dir() -> PathBuf {
     dirs::data_local_dir()

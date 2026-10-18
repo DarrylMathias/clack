@@ -2,24 +2,37 @@
 
 use clap::{Parser, Subcommand};
 
+const HELP_TEMPLATE: &str = "\
+clack {version} — mechanical keyboard sounds for your whole machine
+
+USAGE
+  clack [COMMAND]
+
+{subcommands}
+
+EXAMPLES
+  clack use ibm-model-m
+  clack volume 60
+  clack pack add ~/Downloads/my-mechvibes-pack.zip
+
+FILES
+  config   ~/.config/clack/config.toml
+  packs    ~/.local/share/clack/packs/
+  logs     ~/.local/state/clack/clack.log
+
+PRIVACY
+  clack reads key codes only to pick a sound. Nothing is logged, stored, or sent.
+
+Docs & issues: https://github.com/DarrylMathias/clack
+";
+
 #[derive(Debug, Parser)]
 #[command(
     name = "clack",
     version,
     about = "clack — mechanical keyboard sounds for your whole machine",
     long_about = None,
-    help_template = "\
-clack {version} — mechanical keyboard sounds for your whole machine
-
-{usage-heading} {usage}
-
-{all-args}
-
-PRIVACY
-  clack reads key codes only to pick a sound. Nothing is logged, stored, or sent.
-
-Docs & issues: https://github.com/DarrylMathias/clack
-",
+    help_template = HELP_TEMPLATE,
     disable_help_subcommand = true,
     propagate_version = true,
 )]
@@ -31,6 +44,7 @@ pub struct Cli {
 #[derive(Debug, Subcommand)]
 pub enum Commands {
     // EVERYDAY
+    #[command(next_help_heading = "EVERYDAY")]
     /// Mute/unmute (or double-tap Ctrl anywhere)
     Toggle,
     /// Switch keyboard sound; downloads it if needed
@@ -49,6 +63,7 @@ pub enum Commands {
     Status,
 
     // SERVICE
+    #[command(next_help_heading = "SERVICE")]
     /// Start the background service
     Start,
     /// Stop the background service
@@ -61,6 +76,7 @@ pub enum Commands {
     Off,
 
     // PACKS
+    #[command(next_help_heading = "PACKS")]
     /// Install or remove packs
     Pack {
         #[command(subcommand)]
@@ -68,6 +84,7 @@ pub enum Commands {
     },
 
     // MAINTENANCE
+    #[command(next_help_heading = "MAINTENANCE")]
     /// Run onboarding again
     Setup {
         #[arg(long, help = "Redo everything from scratch")]
@@ -112,7 +129,9 @@ impl Cli {
 
         match self.command {
             None => {
-                // No setup → run setup; for now just show status or prompt.
+                if !clack_core::config::config_path().exists() {
+                    return crate::setup::run_setup(false);
+                }
                 match send(&Command::Status) {
                     Ok(resp) if resp.ok => {
                         if let Some(status) = resp.status {
@@ -357,23 +376,23 @@ impl Cli {
                 if permissions_only {
                     crate::perms::setup_permissions()?;
                 } else {
-                    println!("TODO: setup (reset={reset}) — coming in P3.3");
+                    crate::setup::run_setup(reset)?;
                 }
                 Ok(())
             }
 
             Some(Commands::Doctor) => {
-                println!("TODO: doctor — coming in P4.1");
+                crate::doctor::run_doctor()?;
                 Ok(())
             }
 
             Some(Commands::Update) => {
-                println!("TODO: update — coming in P4.2");
+                crate::update::run_update()?;
                 Ok(())
             }
 
             Some(Commands::Uninstall) => {
-                println!("TODO: uninstall — coming in P4.2");
+                crate::uninstall::run_uninstall()?;
                 Ok(())
             }
         }

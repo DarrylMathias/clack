@@ -155,6 +155,7 @@ pub fn run(cli_sink: Option<String>) -> Result<()> {
     let muted_eng = muted.clone();
 
     let default_pack_name = config.default_pack.clone();
+    let active_pack_name_eng = active_pack_name.clone();
 
     thread::Builder::new()
         .name("clack-engine".into())
@@ -198,11 +199,23 @@ pub fn run(cli_sink: Option<String>) -> Result<()> {
                 if let Some(ref mut eng) = engine {
                     eng.gc();
 
-                    // Stream error recovery.
+                    // Stream error recovery (§M2.4).
                     if eng.stream_error.load(Ordering::Relaxed) {
+                        let old_rate = eng.sample_rate;
                         if let Err(e) = eng.restart(current_gain) {
                             error!("stream restart failed: {e:#}");
                             engine = None;
+                        } else if eng.sample_rate != old_rate {
+                            info!(
+                                "sample rate changed from {} to {} on restart — reloading pack",
+                                old_rate, eng.sample_rate
+                            );
+                            device_rate_for_eng.store(eng.sample_rate, Ordering::Relaxed);
+                            let active = active_pack_name_eng.lock().unwrap().clone();
+                            let pdir = pack_dir(&active);
+                            if let Ok(new_bank) = load_pack(&pdir, eng.sample_rate) {
+                                bank = new_bank;
+                            }
                         }
                     }
                 }
@@ -263,6 +276,16 @@ pub fn run(cli_sink: Option<String>) -> Result<()> {
                         if engine.is_none() {
                             match Engine::start() {
                                 Ok(mut eng) => {
+                                    let old_rate = device_rate_for_eng.load(Ordering::Relaxed);
+                                    if eng.sample_rate != old_rate {
+                                        device_rate_for_eng
+                                            .store(eng.sample_rate, Ordering::Relaxed);
+                                        let active = active_pack_name_eng.lock().unwrap().clone();
+                                        let pdir = pack_dir(&active);
+                                        if let Ok(new_bank) = load_pack(&pdir, eng.sample_rate) {
+                                            bank = new_bank;
+                                        }
+                                    }
                                     eng.set_master_gain(current_gain);
                                     engine = Some(eng);
                                 }
@@ -303,6 +326,15 @@ pub fn run(cli_sink: Option<String>) -> Result<()> {
                     if engine.is_none() {
                         match Engine::start() {
                             Ok(mut eng) => {
+                                let old_rate = device_rate_for_eng.load(Ordering::Relaxed);
+                                if eng.sample_rate != old_rate {
+                                    device_rate_for_eng.store(eng.sample_rate, Ordering::Relaxed);
+                                    let active = active_pack_name_eng.lock().unwrap().clone();
+                                    let pdir = pack_dir(&active);
+                                    if let Ok(new_bank) = load_pack(&pdir, eng.sample_rate) {
+                                        bank = new_bank;
+                                    }
+                                }
                                 eng.set_master_gain(current_gain);
                                 engine = Some(eng);
                             }
@@ -461,7 +493,7 @@ fn handle_ipc(
                 .to_string();
             let dest = pack_dir(&slug);
 
-            match clack_core::mechvibes::import(&src, &dest, "unknown") {
+            match clack_core::pack::import_pack(&src, &dest) {
                 Ok(manifest) => {
                     // Try to load it
                     match load_pack(&dest, device_rate) {
