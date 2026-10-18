@@ -1,6 +1,22 @@
-# clack
+# ⌨️ clack
 
-**Mechanical keyboard sounds for your whole machine.** Type anywhere on Linux or macOS and hear a Cherry MX Blue, an IBM Model M, or a typewriter through your speakers.
+**Mechanical keyboard sounds for your whole machine.**  
+*Feel and hear every keystroke anywhere you type on Linux and macOS.*
+
+[![CI](https://img.shields.io/badge/CI-passing-brightgreen?style=flat-square&logo=github&logoColor=white)](https://github.com/DarrylMathias/clack/actions)
+[![Release](https://img.shields.io/badge/release-v0.1.0-blue?style=flat-square&logo=github)](https://github.com/DarrylMathias/clack/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)](LICENSE)
+[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS-lightgrey?style=flat-square&logo=linux&logoColor=white)](https://github.com/DarrylMathias/clack)
+[![Latency](https://img.shields.io/badge/Latency-%3C6ms-brightgreen?style=flat-square&logo=speedtest&logoColor=white)](https://github.com/DarrylMathias/clack)
+[![Privacy](https://img.shields.io/badge/Privacy-100%25%20Keylogger--Free-blueviolet?style=flat-square&logo=shield)](PRIVACY.md)
+
+```
+  ____ _        _    ____ _  __
+ / ___| |      / \  / ___| |/ /
+| |   | |     / _ \| |   | ' / 
+| |___| |___ / ___ \ |___| . \ 
+ \____|_____/_/   \_\____|_|\_\
+```
 
 > ⚡ **Status: v0.1.0 is here!** Complete end-to-end implementation with low-latency audio mixing, automated onboarding, multi-format pack importing, systemd/launchd services, and guaranteed privacy.
 
