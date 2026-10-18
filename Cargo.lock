@@ -284,6 +284,7 @@ dependencies = [
  "dirs",
  "fastrand",
  "flate2",
+ "libc",
  "serde",
  "serde_json",
  "sha2",

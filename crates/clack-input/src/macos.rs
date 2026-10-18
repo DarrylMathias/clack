@@ -26,7 +26,7 @@ use clack_core::{
     types::{AccessError, DeviceInfo, KeyEvent, KeyState},
 };
 use crossbeam_channel::Sender;
-use tracing::{error, info, warn};
+use tracing::{info, warn};
 
 use crate::InputBackend;
 
@@ -36,6 +36,7 @@ use crate::InputBackend;
 
 #[allow(non_upper_case_globals)]
 #[allow(non_camel_case_types)]
+#[allow(dead_code)]
 mod ffi {
     use std::ffi::c_void;
 
@@ -160,7 +161,7 @@ const MODIFIER_BITS: &[u64] = &[
 // ── CGEventTap callback ───────────────────────────────────────────────────────
 
 unsafe extern "C" fn tap_callback(
-    proxy: ffi::CGEventTapProxy,
+    _proxy: ffi::CGEventTapProxy,
     event_type: ffi::CGEventType,
     event: ffi::CGEventRef,
     user_info: *mut std::ffi::c_void,
