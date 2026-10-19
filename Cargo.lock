@@ -272,7 +272,7 @@ dependencies = [
 
 [[package]]
 name = "clack"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "clack-core",
@@ -302,7 +302,7 @@ dependencies = [
 
 [[package]]
 name = "clack-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "cpal",
@@ -326,7 +326,7 @@ dependencies = [
 
 [[package]]
 name = "clack-input"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "clack-core",

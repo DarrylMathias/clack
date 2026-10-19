@@ -4,7 +4,7 @@
 *Feel and hear every keystroke anywhere you type on Linux and macOS.*
 
 [![CI](https://img.shields.io/badge/CI-passing-brightgreen?style=flat-square&logo=github&logoColor=white)](https://github.com/DarrylMathias/clack/actions)
-[![Release](https://img.shields.io/badge/release-v0.1.0-blue?style=flat-square&logo=github)](https://github.com/DarrylMathias/clack/releases)
+[![Release](https://img.shields.io/badge/release-v0.1.1-blue?style=flat-square&logo=github)](https://github.com/DarrylMathias/clack/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS-lightgrey?style=flat-square&logo=linux&logoColor=white)](https://github.com/DarrylMathias/clack)
 [![Latency](https://img.shields.io/badge/Latency-%3C6ms-brightgreen?style=flat-square&logo=speedtest&logoColor=white)](https://github.com/DarrylMathias/clack)
@@ -18,7 +18,7 @@
  \____|_____/_/   \_\____|_|\_\
 ```
 
-> ⚡ **Status: v0.1.0 is here!** Complete end-to-end implementation with low-latency audio mixing, automated onboarding, multi-format pack importing, systemd/launchd services, and guaranteed privacy.
+> ⚡ **Status: v0.1.1** — Featuring the new interactive Sound Studio, live in-TUI volume tuning (`-` / `+`), on-demand sound downloads, physical speaker isolation, and auto-service restart.
 
 ---
 
@@ -37,23 +37,16 @@ cargo build --release
 sudo cp target/release/clack /usr/local/bin/clack
 ```
 
-### Onboarding
+### Interactive Sound Studio
 
-Run the interactive setup wizard:
+Run `clack use` or `clack list` to open the interactive Sound Studio:
 
-```sh
-clack setup
-```
-
-The setup wizard guides you through:
-1. Setting up device permissions (udev rules for Linux evdev, or macOS Input Monitoring permissions).
-2. Selecting your favorite keyboard sound pack with an interactive live typing test & audio preview.
-3. Setting up the background service (systemd user unit or launchd agent) so clack starts at login.
-
-- **Double-tap Ctrl** anywhere at any time to mute or unmute instantly.
-- **Linux:** all distributions, X11 or Wayland (GNOME, KDE, Hyprland, Sway...), with or without systemd.
-- **macOS:** Apple Silicon and Intel.
-- **Windows:** not supported.
+- **Arrow keys (↑ / ↓)**: Scroll through sound packs.
+- **Space**: Download an uninstalled sound pack on-demand with live preview.
+- **Enter**: Select and activate the keyboard sound pack.
+- **`-` / `+`**: Adjust volume live with immediate audio feedback (auto-saved).
+- **Type anywhere**: Instant auditory and visual feedback for every keypress.
+- **Double-tap Ctrl**: Mute or unmute instantly anywhere on your system.
 
 ---
 
@@ -66,19 +59,18 @@ clack [COMMAND]
 ### Everyday
 | Command | Description |
 |---|---|
+| `clack use [pack]` | Switch keyboard sound, or open interactive studio |
+| `clack list` | Browse all keyboard sounds in interactive studio (`--raw` for plain text) |
 | `clack toggle` | Mute or unmute (or double-tap Ctrl anywhere) |
 | `clack on` / `clack off` | Explicitly unmute or mute |
 | `clack volume [0-100]` | Query or set playback volume with perceptual curve |
 | `clack status` | Display service status, active pack, and volume |
 
-### Sound Packs
+### Sound Packs & Catalog
 | Command | Description |
 |---|---|
-| `clack use <pack>` | Switch active sound pack (auto-downloads if needed) |
-| `clack list` | List installed sound packs |
-| `clack pack browse` | Browse popular sound packs available to install |
-| `clack pack add <url\|path>` | Install a sound pack from a URL, local folder, or archive |
-| `clack pack remove <id>` | Delete an installed sound pack |
+| `clack pack add <id\|url\|path>` | Install a sound pack from catalog, URL, or local archive |
+| `clack pack remove <id>` | Delete a locally installed sound pack |
 
 ### Service & Maintenance
 | Command | Description |
@@ -86,8 +78,8 @@ clack [COMMAND]
 | `clack start` | Start the background daemon service |
 | `clack stop` | Stop the background daemon service |
 | `clack restart` | Restart the background daemon service |
-| `clack doctor` | Diagnose and troubleshoot configuration, audio, and permissions |
-| `clack update` | Check for updates and self-upgrade clack |
+| `clack doctor` | Diagnose configuration, audio sinks, and permissions (● status indicators) |
+| `clack update` | Check for updates, self-upgrade clack, and auto-restart background daemon |
 | `clack uninstall` | Remove clack binary, configuration, and services |
 
 Run `clack --help` for detailed command documentation.
