@@ -55,14 +55,14 @@ pub fn run_doctor() -> Result<()> {
     let mut all_ok = true;
     for check in &checks {
         let symbol = match check.status {
-            StatusLevel::Ok => "\x1b[32m✓\x1b[0m",
+            StatusLevel::Ok => "\x1b[32m●\x1b[0m",
             StatusLevel::Warn => {
                 all_ok = false;
-                "\x1b[33m!\x1b[0m"
+                "\x1b[33m●\x1b[0m"
             }
             StatusLevel::Error => {
                 all_ok = false;
-                "\x1b[31m✗\x1b[0m"
+                "\x1b[31m●\x1b[0m"
             }
         };
 
@@ -292,14 +292,18 @@ fn check_input_access() -> CheckResult {
 fn check_audio() -> CheckResult {
     #[cfg(target_os = "linux")]
     {
-        let sink = std::env::var("PIPEWIRE_NODE")
-            .unwrap_or_else(|_| clack_core::config::DEFAULT_SPEAKER_SINK.to_string());
+        let sink = std::env::var("PIPEWIRE_NODE").unwrap_or_else(|_| {
+            clack_core::config::Config::load()
+                .map(|c| c.effective_output_sink().to_string())
+                .unwrap_or_else(|_| clack_core::config::DEFAULT_SPEAKER_SINK.to_string())
+        });
+
         if !clack_core::mixer::check_pipewire_node_exists(&sink) {
             return CheckResult {
                 status: StatusLevel::Warn,
-                title: format!("Target audio sink '{sink}' not found in PipeWire graph"),
-                detail: Some("The default laptop speaker sink was not found. PipeWire may be idle or using a different sink name.".into()),
-                fix: Some("Check sinks with `wpctl status` and set PIPEWIRE_NODE=<sink_name>".into()),
+                title: format!("Target speaker sink '{sink}' not found in PipeWire graph"),
+                detail: Some("The laptop speaker sink was not found in PipeWire graph.".into()),
+                fix: Some("Check available sinks with `wpctl status` and set output_sink in ~/.config/clack/config.toml".into()),
             };
         }
     }

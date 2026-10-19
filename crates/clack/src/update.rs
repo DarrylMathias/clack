@@ -94,8 +94,11 @@ pub fn run_update() -> Result<()> {
     let _ = clack_core::catalog::fetch_catalog();
 
     // Restart service if running
-    println!("Restarting background service...");
-    let _ = crate::service::restart();
+    println!("Restarting background service with updated binary...");
+    if let Err(e) = crate::service::restart() {
+        println!("Notice: could not restart background service: {e:#}");
+        println!("You can restart it manually with: clack restart");
+    }
 
     #[cfg(target_os = "macos")]
     {
