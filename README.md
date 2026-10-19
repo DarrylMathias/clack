@@ -1,7 +1,7 @@
 # ⌨️ clack
 
-**Mechanical keyboard sounds for your whole machine.**  
-*Feel and hear every keystroke anywhere you type on Linux and macOS.*
+**mechanical keyboard sounds for your whole machine.**  
+*feel and hear every keystroke anywhere you type on Linux and macOS.*
 
 [![CI](https://img.shields.io/badge/CI-passing-brightgreen?style=flat-square&logo=github&logoColor=white)](https://github.com/DarrylMathias/clack/actions)
 [![Release](https://img.shields.io/badge/release-v0.1.1-blue?style=flat-square&logo=github)](https://github.com/DarrylMathias/clack/releases)
@@ -18,9 +18,23 @@
  \____|_____/_/   \_\____|_|\_\
 ```
 
-> ⚡ **Status: v0.1.1** — Featuring the new interactive Sound Studio, live in-TUI volume tuning (`-` / `+`), on-demand sound downloads, physical speaker isolation, and auto-service restart.
-
 ---
+
+## my motivation
+
+recently, i explored the listening mueseum (https://sheets.works/data-viz/keyboard-sounds), and thought of developing something similar, but one that works throughout your whole system
+
+explored projects like Klack (paid, and macos-only), Mechvibes (slow as electron-based), Rustyvibes (fast, but needs manual sound packs download, a hassle)
+
+so I decided to build clack: fast in Rust, heavily compatible with virtually all Linux distros and plug-and-play sound packs
+
+also just one small detail worth mentioning: i've never read a line of this code :) 
+
+the implementation was built with AI. the ambition and requirements were mine though.
+
+# Slop divider 
+everything below this was written by my LLMs, not me :)
+
 
 ## Quick Start
 
