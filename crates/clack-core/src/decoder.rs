@@ -29,6 +29,10 @@ pub fn load_pack(pack_dir: &Path, target_rate: u32) -> Result<SampleBank> {
     let manifest = Manifest::load(pack_dir)
         .with_context(|| format!("loading manifest in {}", pack_dir.display()))?;
 
+    let pack_gain = manifest
+        .gain
+        .unwrap_or_else(|| crate::pack::pack_default_gain(&manifest.id));
+
     // Decode the sprite (if sprite mode) or all per-key files.
     let sprite_decoded: Option<(Vec<f32>, u32, u16)> = if let Some(ref sprite) = manifest.sprite {
         let sprite_path = pack_dir.join(sprite);
@@ -41,7 +45,15 @@ pub fn load_pack(pack_dir: &Path, target_rate: u32) -> Result<SampleBank> {
     };
 
     let resolve = |sound_ref: &SoundRef| -> Vec<Clip> {
-        resolve_clip(sound_ref, pack_dir, sprite_decoded.as_ref(), target_rate).unwrap_or_default()
+        let mut clips = resolve_clip(sound_ref, pack_dir, sprite_decoded.as_ref(), target_rate)
+            .unwrap_or_default();
+        if (pack_gain - 1.0).abs() > 1e-4 {
+            for clip in &mut clips {
+                let boosted: Vec<f32> = clip.samples.iter().map(|&s| s * pack_gain).collect();
+                clip.samples = Arc::new(boosted);
+            }
+        }
+        clips
     };
 
     // Build press map.
@@ -110,7 +122,17 @@ fn resolve_clip(
             }])
         }
         SoundRef::File(rel_path) => {
-            let path = pack_dir.join(rel_path);
+            let mut path = pack_dir.join(rel_path);
+            if !path.exists() {
+                // Handle common filename variations / aliases in pack definitions:
+                if rel_path == "sounds/key.wav" && pack_dir.join("sounds/key1.wav").exists() {
+                    path = pack_dir.join("sounds/key1.wav");
+                } else if rel_path == "sounds/enter.wav" && pack_dir.join("sounds/ent.wav").exists() {
+                    path = pack_dir.join("sounds/ent.wav");
+                } else if rel_path == "sounds/backspace.wav" && pack_dir.join("sounds/back.wav").exists() {
+                    path = pack_dir.join("sounds/back.wav");
+                }
+            }
             let (raw, src_rate, channels) =
                 decode_file(&path).with_context(|| format!("decoding {}", path.display()))?;
             let resampled = resample(&raw, src_rate, target_rate, channels);
@@ -122,7 +144,15 @@ fn resolve_clip(
         SoundRef::Multi(refs) => {
             let mut clips = Vec::new();
             for r in refs {
-                clips.extend(resolve_clip(r, pack_dir, sprite, target_rate)?);
+                match resolve_clip(r, pack_dir, sprite, target_rate) {
+                    Ok(c) => clips.extend(c),
+                    Err(e) => {
+                        warn!("failed resolving clip in multi: {e:#}");
+                    }
+                }
+            }
+            if clips.is_empty() && !refs.is_empty() {
+                return resolve_clip(&refs[0], pack_dir, sprite, target_rate);
             }
             Ok(clips)
         }
@@ -297,5 +327,37 @@ mod tests {
         }
         // In 0.1s of 1000 Hz, there should be ~200 zero crossings
         assert!((zero_crossings - 200).abs() <= 2);
+    }
+
+    #[test]
+    fn test_load_pack_telios_v2_fallback() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap();
+        let tar_path = root.join("dist/packs/telios-v2.tar.gz");
+        if !tar_path.exists() {
+            return;
+        }
+
+        let temp = tempfile::tempdir().unwrap();
+        let file = std::fs::File::open(&tar_path).unwrap();
+        let gz = flate2::read::GzDecoder::new(file);
+        let mut archive = tar::Archive::new(gz);
+        archive.unpack(temp.path()).unwrap();
+
+        let bank = load_pack(temp.path(), 48000).unwrap();
+        // press_default must contain the 6 key clips, resolved despite manifest asking for key.wav
+        assert_eq!(bank.press_default.len(), 6);
+        // Space (code 57)
+        let space_clips = bank.press[57].as_ref().unwrap();
+        assert_eq!(space_clips.len(), 1);
+        // Enter (code 28) resolved ent.wav despite enter.wav in manifest
+        let enter_clips = bank.press[28].as_ref().unwrap();
+        assert_eq!(enter_clips.len(), 1);
+        // Backspace (code 14) resolved back.wav despite backspace.wav in manifest
+        let back_clips = bank.press[14].as_ref().unwrap();
+        assert_eq!(back_clips.len(), 1);
     }
 }

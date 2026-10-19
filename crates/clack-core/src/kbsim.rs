@@ -98,6 +98,7 @@ pub fn import(src: &Path, dest: &Path, license: &str) -> Result<Manifest> {
         source: Some("https://github.com/tplai/kbsim".to_string()),
         credits: Some("tplai / kbsim".to_string()),
         sprite: None,
+        gain: None,
         press: SoundMap {
             default: default_press,
             keys: press_keys,

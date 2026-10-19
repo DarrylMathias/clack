@@ -99,13 +99,16 @@ pub fn install_pack(entry: &CatalogEntry) -> Result<()> {
 
     let dest_dir = crate::config::packs_dir().join(&entry.id);
     if dest_dir.exists() {
-        return Ok(());
+        if crate::pack::Manifest::load(&dest_dir).is_ok() {
+            return Ok(());
+        }
+        // Manifest is missing or corrupted — clean up and re-download
+        let _ = fs::remove_dir_all(&dest_dir);
     }
 
     let parent_dir = crate::config::packs_dir();
     fs::create_dir_all(&parent_dir).context("creating packs directory")?;
-
-    println!("Downloading {}...", entry.id);
+    debug!("downloading pack {}", entry.id);
     let resp = ureq::get(&entry.url).call().context("downloading pack")?;
     let mut reader = resp.into_reader();
 

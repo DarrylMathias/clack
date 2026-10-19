@@ -53,6 +53,7 @@ pub fn import(src: &Path, dest: &Path, license: &str) -> Result<Manifest> {
         source: Some("Imported from Mechvibes".to_string()),
         credits: None,
         sprite: None,
+        gain: None,
         press: SoundMap::default(),
         release: None,
     };

@@ -147,6 +147,7 @@ pub fn import(src: &Path, dest: &Path, license: &str) -> Result<Manifest> {
         source: Some("https://github.com/zevv/bucklespring".to_string()),
         credits: Some("Ico Doornekamp (zevv) / Bucklespring".to_string()),
         sprite: None,
+        gain: None,
         press: press_map,
         release: release_map,
     };

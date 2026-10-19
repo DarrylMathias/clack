@@ -110,6 +110,7 @@ pub fn import(src: &Path, dest: &Path, license: &str) -> Result<Manifest> {
         source: Some("https://github.com/nathan-fiscaletti/keyboardsounds".to_string()),
         credits: Some("Nathan Fiscaletti / keyboardsounds".to_string()),
         sprite: None,
+        gain: None,
         press: SoundMap {
             default: default_press,
             keys: press_keys,

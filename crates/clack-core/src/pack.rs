@@ -36,7 +36,7 @@ impl SoundMap {
 }
 
 /// Pack sound family.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum Family {
     Clicky,
@@ -45,6 +45,7 @@ pub enum Family {
     Topre,
     Buckling,
     Typewriter,
+    #[default]
     Other,
 }
 
@@ -63,13 +64,20 @@ impl std::fmt::Display for Family {
     }
 }
 
+fn default_manifest_format() -> u32 {
+    1
+}
+
 /// Parsed `manifest.toml`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Manifest {
+    #[serde(default = "default_manifest_format")]
     pub format: u32,
     pub id: String,
     pub name: String,
+    #[serde(default)]
     pub family: Family,
+    #[serde(default)]
     pub license: String,
     #[serde(default)]
     pub source: Option<String>,
@@ -80,10 +88,28 @@ pub struct Manifest {
     #[serde(default)]
     pub sprite: Option<String>,
 
+    /// Optional playback gain multiplier (e.g. 2.2 for quiet tactile/linear recordings).
+    #[serde(default)]
+    pub gain: Option<f32>,
+
     #[serde(default)]
     pub press: SoundMap,
     #[serde(default)]
     pub release: Option<SoundMap>,
+}
+
+/// Built-in preboost factors for sound packs recorded at lower baseline RMS levels.
+pub fn pack_default_gain(id: &str) -> f32 {
+    match id {
+        "alps-skcm-blue" => 4.5,
+        "cream-travel" => 5.0,
+        "cherrymx-brown-pbt" => 2.6,
+        "cherrymx-brown-abs" => 2.4,
+        "cherrymx-black-abs" => 2.8,
+        "telios-v2" => 2.4,
+        "eg-oreo" => 3.5,
+        _ => 1.0,
+    }
 }
 
 impl Manifest {
@@ -104,12 +130,29 @@ pub fn pack_dir(id: &str) -> PathBuf {
 
 /// Recursively copy a directory and its contents.
 pub fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> Result<()> {
+    if let (Ok(s), Ok(d)) = (src.canonicalize(), dst.canonicalize()) {
+        if s == d {
+            return Ok(());
+        }
+    } else if src == dst {
+        return Ok(());
+    }
+
     std::fs::create_dir_all(dst)?;
     for entry in std::fs::read_dir(src)? {
         let entry = entry?;
         let ty = entry.file_type()?;
         let from = entry.path();
         let to = dst.join(entry.file_name());
+
+        if let (Ok(f), Ok(t)) = (from.canonicalize(), to.canonicalize()) {
+            if f == t {
+                continue;
+            }
+        } else if from == to {
+            continue;
+        }
+
         if ty.is_dir() {
             copy_dir_recursive(&from, &to)?;
         } else {
@@ -122,6 +165,16 @@ pub fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> Resul
 /// Import any pack (zip archive, tar.gz, native pack, Mechvibes, Bucklespring, Keyboardsounds, kbsim)
 /// into `dest` directory and return the parsed `Manifest`.
 pub fn import_pack(src: &std::path::Path, dest: &std::path::Path) -> Result<Manifest> {
+    let is_same = if let (Ok(s), Ok(d)) = (src.canonicalize(), dest.canonicalize()) {
+        s == d
+    } else {
+        src == dest
+    };
+
+    if is_same && dest.join("manifest.toml").exists() {
+        return Manifest::load(dest);
+    }
+
     // If src is a zip or tar.gz archive, extract to temp dir and recurse.
     if src.is_file() {
         let name = src
@@ -170,7 +223,9 @@ pub fn import_pack(src: &std::path::Path, dest: &std::path::Path) -> Result<Mani
 
     // 1. Native clack pack
     if src.join("manifest.toml").exists() {
-        copy_dir_recursive(src, dest)?;
+        if !is_same {
+            copy_dir_recursive(src, dest)?;
+        }
         return Manifest::load(dest);
     }
 
@@ -241,6 +296,55 @@ default = [[0, 90], [120, 90]]
     }
 
     #[test]
+    fn test_manifest_parse_missing_format_defaults_to_1() {
+        let toml_str = r#"
+id = "cherry-mx-blue-pbt"
+name = "Cherry MX Blue (PBT)"
+license = "MIT"
+sprite = "sound.ogg"
+
+[press]
+default = [[0, 90], [120, 90]]
+"#;
+        let manifest: Manifest = toml::from_str(toml_str).unwrap();
+        assert_eq!(manifest.format, 1);
+        assert_eq!(manifest.family, Family::Other);
+        assert_eq!(manifest.id, "cherry-mx-blue-pbt");
+    }
+
+    #[test]
+    fn test_copy_dir_recursive_same_dir_does_not_truncate() {
+        let temp = tempfile::tempdir().unwrap();
+        let file_path = temp.path().join("manifest.toml");
+        std::fs::write(&file_path, "test-content").unwrap();
+
+        // Copy directory onto itself
+        copy_dir_recursive(temp.path(), temp.path()).unwrap();
+
+        let content = std::fs::read_to_string(&file_path).unwrap();
+        assert_eq!(content, "test-content");
+    }
+
+    #[test]
+    fn test_import_pack_same_dir() {
+        let temp = tempfile::tempdir().unwrap();
+        let manifest_content = r#"
+format = 1
+id = "test-pack"
+name = "Test Pack"
+family = "clicky"
+license = "MIT"
+"#;
+        std::fs::write(temp.path().join("manifest.toml"), manifest_content).unwrap();
+
+        let manifest = import_pack(temp.path(), temp.path()).unwrap();
+        assert_eq!(manifest.id, "test-pack");
+        // Verify manifest was not wiped
+        let after = std::fs::read_to_string(temp.path().join("manifest.toml")).unwrap();
+        assert_eq!(after, manifest_content);
+    }
+
+    #[test]
     fn test_manifest_parse_multi_file_mode() {
         let toml_str = r#"
 format = 1
@@ -261,5 +365,30 @@ default = "sounds/rel.wav"
         assert_eq!(manifest.family, Family::Buckling);
         assert!(manifest.sprite.is_none());
         assert!(manifest.release.is_some());
+    }
+
+    #[test]
+    fn test_manifest_gain_parsing() {
+        let toml_str = r#"
+format = 1
+id = "cherrymx-brown-pbt"
+name = "Cherry MX Brown (PBT)"
+family = "tactile"
+license = "MIT"
+gain = 2.2
+
+[press]
+default = "sounds/key.wav"
+"#;
+        let manifest: Manifest = toml::from_str(toml_str).unwrap();
+        assert_eq!(manifest.gain, Some(2.2));
+        assert_eq!(pack_default_gain("alps-skcm-blue"), 4.5);
+        assert_eq!(pack_default_gain("cream-travel"), 5.0);
+        assert_eq!(pack_default_gain("cherrymx-brown-pbt"), 2.6);
+        assert_eq!(pack_default_gain("cherrymx-brown-abs"), 2.4);
+        assert_eq!(pack_default_gain("cherrymx-black-abs"), 2.8);
+        assert_eq!(pack_default_gain("telios-v2"), 2.4);
+        assert_eq!(pack_default_gain("eg-oreo"), 3.5);
+        assert_eq!(pack_default_gain("ibm-model-m"), 1.0);
     }
 }

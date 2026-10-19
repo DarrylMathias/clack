@@ -355,7 +355,7 @@ credits = "Nathan Fiscaletti / keyboardsounds"
 
 [press]
 default = [
-  "sounds/key.wav",
+  "sounds/key1.wav",
   "sounds/key2.wav",
   "sounds/key3.wav",
   "sounds/key4.wav",
@@ -363,8 +363,8 @@ default = [
   "sounds/key6.wav"
 ]
 "57" = "sounds/space.wav"
-"28" = "sounds/enter.wav"
-"14" = "sounds/backspace.wav"
+"28" = "sounds/ent.wav"
+"14" = "sounds/back.wav"
 "42" = "sounds/shift.wav"
 "54" = "sounds/shift.wav"
 "15" = "sounds/tab.wav"
