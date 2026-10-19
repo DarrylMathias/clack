@@ -47,13 +47,17 @@ pub enum Commands {
     #[command(next_help_heading = "EVERYDAY")]
     /// Mute/unmute (or double-tap Ctrl anywhere)
     Toggle,
-    /// Switch keyboard sound; downloads it if needed
+    /// Switch keyboard sound; downloads it if needed (interactive studio if no name given)
     Use {
-        /// Pack name (e.g. `ibm-model-m`)
-        pack: String,
+        /// Pack name (omit to pick interactively in TUI)
+        pack: Option<String>,
     },
-    /// Show all keyboard sounds
-    List,
+    /// Show all keyboard sounds in interactive studio
+    List {
+        /// Output plain text instead of interactive studio
+        #[arg(long)]
+        raw: bool,
+    },
     /// Get or set the volume (0–100)
     Volume {
         /// New volume (omit to print current)
@@ -188,22 +192,27 @@ impl Cli {
                 Ok(())
             }
 
-            Some(Commands::Use { pack }) => {
-                let p = clack_core::config::packs_dir().join(&pack);
-                if !p.exists() {
-                    // Try auto-install
-                    if let Ok(cat) = clack_core::catalog::fetch_catalog() {
-                        if let Some(entry) = cat.packs.iter().find(|e| e.id == *pack) {
-                            clack_core::catalog::install_pack(entry)?;
-                        }
-                    }
-                }
-                send_ok(&Command::Use { pack: pack.clone() })?;
-                println!("switched to {pack}");
+            Some(Commands::Use { pack: Some(p) }) => {
+                apply_use_pack(&p)?;
                 Ok(())
             }
 
-            Some(Commands::List) => {
+            Some(Commands::Use { pack: None }) => {
+                if let Some(pack) = crate::setup::run_picker()? {
+                    apply_use_pack(&pack)?;
+                }
+                Ok(())
+            }
+
+            Some(Commands::List { raw }) => {
+                use std::io::IsTerminal;
+                if !raw && std::io::stdout().is_terminal() {
+                    if let Some(pack) = crate::setup::run_picker()? {
+                        apply_use_pack(&pack)?;
+                    }
+                    return Ok(());
+                }
+
                 // Determine active pack
                 let active_pack = match crate::ipc_client::send(&clack_core::ipc::Command::Status) {
                     Ok(resp) => resp.status.and_then(|s| s.active_pack).unwrap_or_else(|| {
@@ -317,54 +326,81 @@ impl Cli {
                         let is_url_or_id = source.starts_with("http")
                             || !source.contains(std::path::MAIN_SEPARATOR);
 
-                        let path_to_add = if is_url_or_id {
+                        let (path_to_add, catalog_entry) = if is_url_or_id {
                             // Find in catalog
                             let cat = clack_core::catalog::fetch_catalog()?;
                             let entry = cat
                                 .packs
                                 .iter()
                                 .find(|p| p.id == source || p.url == source)
-                                .ok_or_else(|| {
-                                    anyhow::anyhow!("Pack '{}' not found in catalog", source)
-                                })?;
-                            clack_core::catalog::install_pack(entry)?;
-                            clack_core::config::packs_dir().join(&entry.id)
+                                .cloned();
+                            if let Some(ref entry) = entry {
+                                println!("downloading {}...", entry.id);
+                                clack_core::catalog::install_pack(entry)?;
+                                (clack_core::config::packs_dir().join(&entry.id), Some(entry.clone()))
+                            } else {
+                                (std::path::PathBuf::from(&source), None)
+                            }
                         } else {
-                            std::fs::canonicalize(&source).map_err(|e| {
-                                anyhow::anyhow!("File not found '{}': {}", source, e)
-                            })?
+                            (
+                                std::fs::canonicalize(&source).map_err(|e| {
+                                    anyhow::anyhow!("File not found '{}': {}", source, e)
+                                })?,
+                                None,
+                            )
                         };
 
-                        let resp = send_ok(&Command::AddPack {
-                            path: path_to_add.to_string_lossy().into_owned(),
-                        });
-                        match resp {
-                            Ok(r) => {
-                                if let Some(s) = r.status {
-                                    if let Some(pack) = s.active_pack {
-                                        println!("Pack imported and active: {}", pack);
+                        if let Some(entry) = catalog_entry {
+                            let manifest = clack_core::pack::Manifest::load(&path_to_add)?;
+                            let resp = send_ok(&Command::Use { pack: entry.id.clone() });
+                            match resp {
+                                Ok(_) => {
+                                    println!("Pack installed and active: {} ({})", manifest.name, entry.id);
+                                }
+                                Err(_) => {
+                                    if let Ok(mut cfg) = clack_core::config::Config::load() {
+                                        cfg.default_pack = entry.id.clone();
+                                        let _ = cfg.save();
                                     }
+                                    println!("Pack installed: {} ({})", manifest.name, path_to_add.display());
                                 }
                             }
-                            Err(_) => {
-                                let filename = path_to_add
-                                    .file_name()
-                                    .map(|s| s.to_string_lossy().to_string())
-                                    .unwrap_or_else(|| "imported-pack".to_string());
-                                let slug = filename
-                                    .trim_end_matches(".tar.gz")
-                                    .trim_end_matches(".tgz")
-                                    .trim_end_matches(".zip")
-                                    .to_lowercase()
-                                    .chars()
-                                    .map(|c| if c.is_alphanumeric() { c } else { '-' })
-                                    .collect::<String>()
-                                    .replace("--", "-")
-                                    .trim_matches('-')
-                                    .to_string();
-                                let dest = clack_core::pack::pack_dir(&slug);
-                                let manifest = clack_core::pack::import_pack(&path_to_add, &dest)?;
-                                println!("Pack imported: {} ({})", manifest.name, dest.display());
+                        } else {
+                            let resp = send_ok(&Command::AddPack {
+                                path: path_to_add.to_string_lossy().into_owned(),
+                            });
+                            match resp {
+                                Ok(r) => {
+                                    if let Some(s) = r.status {
+                                        if let Some(pack) = s.active_pack {
+                                            println!("Pack imported and active: {}", pack);
+                                        }
+                                    }
+                                }
+                                Err(_) => {
+                                    let filename = path_to_add
+                                        .file_name()
+                                        .map(|s| s.to_string_lossy().to_string())
+                                        .unwrap_or_else(|| "imported-pack".to_string());
+                                    let slug = filename
+                                        .trim_end_matches(".tar.gz")
+                                        .trim_end_matches(".tgz")
+                                        .trim_end_matches(".zip")
+                                        .to_lowercase()
+                                        .chars()
+                                        .map(|c| if c.is_alphanumeric() { c } else { '-' })
+                                        .collect::<String>()
+                                        .replace("--", "-")
+                                        .trim_matches('-')
+                                        .to_string();
+                                    let dest = clack_core::pack::pack_dir(&slug);
+                                    let manifest = clack_core::pack::import_pack(&path_to_add, &dest)?;
+                                    if let Ok(mut cfg) = clack_core::config::Config::load() {
+                                        cfg.default_pack = manifest.id.clone();
+                                        let _ = cfg.save();
+                                    }
+                                    println!("Pack imported: {} ({})", manifest.name, dest.display());
+                                }
                             }
                         }
                         Ok(())
@@ -431,4 +467,25 @@ fn print_status(s: &clack_core::ipc::DaemonStatus) {
         s.volume,
         s.keyboards_detected.len(),
     );
+}
+
+fn apply_use_pack(pack: &str) -> anyhow::Result<()> {
+    let p = clack_core::config::packs_dir().join(pack);
+    if !p.exists() || clack_core::pack::Manifest::load(&p).is_err() {
+        if let Ok(cat) = clack_core::catalog::fetch_catalog() {
+            if let Some(entry) = cat.packs.iter().find(|e| e.id == pack) {
+                println!("downloading {pack}...");
+                clack_core::catalog::install_pack(entry)?;
+            }
+        }
+    }
+    if let Ok(mut cfg) = clack_core::config::Config::load() {
+        cfg.default_pack = pack.to_string();
+        let _ = cfg.save();
+    }
+    let _ = crate::ipc_client::send(&clack_core::ipc::Command::Use {
+        pack: pack.to_string(),
+    });
+    println!("switched to {pack}");
+    Ok(())
 }
