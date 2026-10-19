@@ -214,12 +214,11 @@ impl Engine {
         if !target_sink.is_empty() {
             // SAFETY: called before cpal host stream is started.
             unsafe { std::env::set_var("PIPEWIRE_NODE", target_sink) };
-        }
 
-        // Never follow the default sink. If that node doesn't exist, log at warn and idle; don't fall back to the default device.
-        if !check_pipewire_node_exists(target_sink) {
-            warn!("audio target node '{target_sink}' not found in PipeWire; staying idle");
-            anyhow::bail!("audio target node '{target_sink}' not found in PipeWire");
+            if !check_pipewire_node_exists(target_sink) {
+                warn!("audio target node '{target_sink}' not found in PipeWire; staying idle");
+                anyhow::bail!("audio target node '{target_sink}' not found in PipeWire");
+            }
         }
 
         let host = cpal::default_host();
@@ -562,6 +561,7 @@ mod tests {
             assert!(check_pipewire_node_exists(
                 crate::config::DEFAULT_SPEAKER_SINK
             ));
+            assert!(!check_pipewire_node_exists(""));
             assert!(!check_pipewire_node_exists(
                 "nonexistent_audio_sink_node_12345"
             ));

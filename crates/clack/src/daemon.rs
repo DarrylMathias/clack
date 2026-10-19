@@ -69,18 +69,15 @@ pub fn run(cli_sink: Option<String>) -> Result<()> {
     let config = Config::load().context("loading config")?;
     let state = State::load().unwrap_or_default();
 
-    // Priority: CLI override -> PIPEWIRE_NODE env -> config.output_sink -> default
-    let output_sink = cli_sink
+    // Priority: CLI override -> PIPEWIRE_NODE env -> config.effective_output_sink()
+    let output_sink: String = cli_sink
         .or_else(|| {
             std::env::var("PIPEWIRE_NODE")
                 .ok()
                 .filter(|s| !s.is_empty())
         })
-        .or(config.output_sink.clone())
-        .unwrap_or_else(|| clack_core::config::DEFAULT_SPEAKER_SINK.to_string());
+        .unwrap_or_else(|| config.effective_output_sink().to_string());
 
-    // Before opening the stream, set env PIPEWIRE_NODE=<that node name>
-    // (do it early in main, before threads spawn; std::env::set_var is fine in edition 2021).
     unsafe {
         std::env::set_var("PIPEWIRE_NODE", &output_sink);
         if std::env::var("PIPEWIRE_LATENCY").is_err() {

@@ -19,11 +19,9 @@ pub fn install_and_start() -> Result<()> {
         std::fs::create_dir_all(&sysd_dir)?;
         let svc_path = sysd_dir.join("clack.service");
         let exe = std::env::current_exe()?;
-        // Read the configured speaker sink so the unit matches the binary.
-        let output_sink = clack_core::config::Config::load()
-            .unwrap_or_default()
-            .effective_output_sink()
-            .to_string();
+        let cfg = clack_core::config::Config::load().unwrap_or_default();
+        let sink = cfg.effective_output_sink();
+        let env_node = format!("Environment=PIPEWIRE_NODE={sink}\n");
         let content = format!(
             "[Unit]\n\
             Description=Clack Keyboard Sounds\n\
@@ -33,13 +31,13 @@ pub fn install_and_start() -> Result<()> {
             ExecStart=\"{}\" daemon\n\
             Restart=on-failure\n\
             RestartSec=3\n\
-            Environment=PIPEWIRE_NODE={}\n\
+            {}\
             Environment=PIPEWIRE_LATENCY=256/48000\n\
             \n\
             [Install]\n\
             WantedBy=default.target\n",
             exe.display(),
-            output_sink,
+            env_node,
         );
         std::fs::write(&svc_path, content)?;
         // Always reload so the new unit takes effect.
@@ -105,16 +103,23 @@ pub fn stop() -> Result<()> {
 #[cfg(target_os = "linux")]
 pub fn restart() -> Result<()> {
     if is_systemd_available() {
-        Command::new("systemctl")
+        let _ = Command::new("systemctl")
+            .args(["--user", "daemon-reload"])
+            .status();
+        let status = Command::new("systemctl")
             .args(["--user", "restart", "clack.service"])
-            .status()?;
-        println!("clack restarted (systemd)");
-    } else {
-        stop()?;
-        std::thread::sleep(std::time::Duration::from_millis(500));
-        spawn_detached()?;
-        println!("clack restarted (detached)");
+            .status();
+        if let Ok(s) = status {
+            if s.success() {
+                println!("clack restarted (systemd)");
+                return Ok(());
+            }
+        }
     }
+    stop()?;
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    spawn_detached()?;
+    println!("clack restarted (detached)");
     Ok(())
 }
 

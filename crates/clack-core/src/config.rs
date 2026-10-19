@@ -39,10 +39,8 @@ pub struct Config {
     pub toggle: ToggleBinding,
     pub release_sounds: bool,
     pub humanize: bool,
-    /// PipeWire node.name of the built-in speaker sink.
-    /// Clack will ONLY output here; it never follows the default sink.
-    /// If None, DEFAULT_SPEAKER_SINK is used.
-    /// If the sink does not exist, clack logs a warning and stays idle.
+    /// PipeWire node.name of the speaker audio sink.
+    /// Defaults to DEFAULT_SPEAKER_SINK to strictly route to physical laptop speakers.
     pub output_sink: Option<String>,
     /// Seconds of silence after which the audio stream is closed.
     /// The stream reopens automatically on the next keypress.
