@@ -337,7 +337,10 @@ impl Cli {
                             if let Some(ref entry) = entry {
                                 println!("downloading {}...", entry.id);
                                 clack_core::catalog::install_pack(entry)?;
-                                (clack_core::config::packs_dir().join(&entry.id), Some(entry.clone()))
+                                (
+                                    clack_core::config::packs_dir().join(&entry.id),
+                                    Some(entry.clone()),
+                                )
                             } else {
                                 (std::path::PathBuf::from(&source), None)
                             }
@@ -352,17 +355,26 @@ impl Cli {
 
                         if let Some(entry) = catalog_entry {
                             let manifest = clack_core::pack::Manifest::load(&path_to_add)?;
-                            let resp = send_ok(&Command::Use { pack: entry.id.clone() });
+                            let resp = send_ok(&Command::Use {
+                                pack: entry.id.clone(),
+                            });
                             match resp {
                                 Ok(_) => {
-                                    println!("Pack installed and active: {} ({})", manifest.name, entry.id);
+                                    println!(
+                                        "Pack installed and active: {} ({})",
+                                        manifest.name, entry.id
+                                    );
                                 }
                                 Err(_) => {
                                     if let Ok(mut cfg) = clack_core::config::Config::load() {
                                         cfg.default_pack = entry.id.clone();
                                         let _ = cfg.save();
                                     }
-                                    println!("Pack installed: {} ({})", manifest.name, path_to_add.display());
+                                    println!(
+                                        "Pack installed: {} ({})",
+                                        manifest.name,
+                                        path_to_add.display()
+                                    );
                                 }
                             }
                         } else {
@@ -394,12 +406,17 @@ impl Cli {
                                         .trim_matches('-')
                                         .to_string();
                                     let dest = clack_core::pack::pack_dir(&slug);
-                                    let manifest = clack_core::pack::import_pack(&path_to_add, &dest)?;
+                                    let manifest =
+                                        clack_core::pack::import_pack(&path_to_add, &dest)?;
                                     if let Ok(mut cfg) = clack_core::config::Config::load() {
                                         cfg.default_pack = manifest.id.clone();
                                         let _ = cfg.save();
                                     }
-                                    println!("Pack imported: {} ({})", manifest.name, dest.display());
+                                    println!(
+                                        "Pack imported: {} ({})",
+                                        manifest.name,
+                                        dest.display()
+                                    );
                                 }
                             }
                         }

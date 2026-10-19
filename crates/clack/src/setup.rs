@@ -199,12 +199,18 @@ fn box_top(title: &str, width: usize) -> String {
     let border = "\x1b[38;5;239m";
     let reset = "\x1b[0m";
     if title.is_empty() {
-        format!("{border}╭{}╮{reset}\r\n", "─".repeat(width.saturating_sub(2)))
+        format!(
+            "{border}╭{}╮{reset}\r\n",
+            "─".repeat(width.saturating_sub(2))
+        )
     } else {
         let title_fmt = format!(" {title} ");
         let v_len = visual_width(&title_fmt);
         let rem = width.saturating_sub(2 + 2 + v_len);
-        format!("{border}╭─{reset}{title_fmt}{border}{}╮{reset}\r\n", "─".repeat(rem))
+        format!(
+            "{border}╭─{reset}{title_fmt}{border}{}╮{reset}\r\n",
+            "─".repeat(rem)
+        )
     }
 }
 
@@ -219,9 +225,13 @@ fn box_row(content: &str, width: usize) -> String {
 fn box_bottom(width: usize) -> String {
     let border = "\x1b[38;5;239m";
     let reset = "\x1b[0m";
-    format!("{border}╰{}╯{reset}\r\n", "─".repeat(width.saturating_sub(2)))
+    format!(
+        "{border}╰{}╯{reset}\r\n",
+        "─".repeat(width.saturating_sub(2))
+    )
 }
 
+#[allow(clippy::needless_range_loop)]
 fn render_frame(
     packs: &[PackItem],
     selected: usize,
@@ -301,7 +311,10 @@ fn render_frame(
     }
 
     if end_idx < packs.len() {
-        let down_ind = format!("\x1b[38;5;244m    ▼ ({} more below)\x1b[0m", packs.len() - end_idx);
+        let down_ind = format!(
+            "\x1b[38;5;244m    ▼ ({} more below)\x1b[0m",
+            packs.len() - end_idx
+        );
         frame.push_str(&box_row(&down_ind, width));
     }
 
@@ -448,34 +461,30 @@ pub fn run_picker() -> Result<Option<String>> {
             if let Event::Key(key) = event::read()? {
                 if key.kind == KeyEventKind::Press {
                     match key.code {
-                        KeyCode::Up => {
-                            if selected_idx > 0 {
-                                selected_idx -= 1;
-                                let pdir = pack_dir(&packs[selected_idx].id);
-                                if pdir.exists() && packs[selected_idx].id != loaded_pack_id {
-                                    if let Ok(bank) = load_pack(&pdir, 48_000) {
-                                        current_bank = Some(bank);
-                                        loaded_pack_id = packs[selected_idx].id.clone();
-                                    }
-                                } else if !pdir.exists() {
-                                    current_bank = None;
-                                    loaded_pack_id.clear();
+                        KeyCode::Up if selected_idx > 0 => {
+                            selected_idx -= 1;
+                            let pdir = pack_dir(&packs[selected_idx].id);
+                            if pdir.exists() && packs[selected_idx].id != loaded_pack_id {
+                                if let Ok(bank) = load_pack(&pdir, 48_000) {
+                                    current_bank = Some(bank);
+                                    loaded_pack_id = packs[selected_idx].id.clone();
                                 }
+                            } else if !pdir.exists() {
+                                current_bank = None;
+                                loaded_pack_id.clear();
                             }
                         }
-                        KeyCode::Down => {
-                            if selected_idx + 1 < packs.len() {
-                                selected_idx += 1;
-                                let pdir = pack_dir(&packs[selected_idx].id);
-                                if pdir.exists() && packs[selected_idx].id != loaded_pack_id {
-                                    if let Ok(bank) = load_pack(&pdir, 48_000) {
-                                        current_bank = Some(bank);
-                                        loaded_pack_id = packs[selected_idx].id.clone();
-                                    }
-                                } else if !pdir.exists() {
-                                    current_bank = None;
-                                    loaded_pack_id.clear();
+                        KeyCode::Down if selected_idx + 1 < packs.len() => {
+                            selected_idx += 1;
+                            let pdir = pack_dir(&packs[selected_idx].id);
+                            if pdir.exists() && packs[selected_idx].id != loaded_pack_id {
+                                if let Ok(bank) = load_pack(&pdir, 48_000) {
+                                    current_bank = Some(bank);
+                                    loaded_pack_id = packs[selected_idx].id.clone();
                                 }
+                            } else if !pdir.exists() {
+                                current_bank = None;
+                                loaded_pack_id.clear();
                             }
                         }
                         // SPACE: Download uninstalled pack, OR type space if already installed!
@@ -574,7 +583,9 @@ pub fn run_picker() -> Result<Option<String>> {
                                 c.volume = current_vol;
                                 let _ = c.save();
                             }
-                            let _ = crate::ipc_client::send(&clack_core::ipc::Command::Volume { value: current_vol });
+                            let _ = crate::ipc_client::send(&clack_core::ipc::Command::Volume {
+                                value: current_vol,
+                            });
                         }
                         KeyCode::Char('+') | KeyCode::Char('=') => {
                             current_vol = (current_vol + 5).min(100);
@@ -590,7 +601,9 @@ pub fn run_picker() -> Result<Option<String>> {
                                 c.volume = current_vol;
                                 let _ = c.save();
                             }
-                            let _ = crate::ipc_client::send(&clack_core::ipc::Command::Volume { value: current_vol });
+                            let _ = crate::ipc_client::send(&clack_core::ipc::Command::Volume {
+                                value: current_vol,
+                            });
                         }
                         KeyCode::Char(c) => {
                             typed_text.push(c);

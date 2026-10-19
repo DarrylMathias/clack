@@ -127,9 +127,12 @@ fn resolve_clip(
                 // Handle common filename variations / aliases in pack definitions:
                 if rel_path == "sounds/key.wav" && pack_dir.join("sounds/key1.wav").exists() {
                     path = pack_dir.join("sounds/key1.wav");
-                } else if rel_path == "sounds/enter.wav" && pack_dir.join("sounds/ent.wav").exists() {
+                } else if rel_path == "sounds/enter.wav" && pack_dir.join("sounds/ent.wav").exists()
+                {
                     path = pack_dir.join("sounds/ent.wav");
-                } else if rel_path == "sounds/backspace.wav" && pack_dir.join("sounds/back.wav").exists() {
+                } else if rel_path == "sounds/backspace.wav"
+                    && pack_dir.join("sounds/back.wav").exists()
+                {
                     path = pack_dir.join("sounds/back.wav");
                 }
             }
